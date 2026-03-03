@@ -1,4 +1,4 @@
-;;; gx-org.el --- Advanced Documentation Tools -*- lexical-binding: t; -*-
+;;; r2-org.el --- Advanced Documentation Tools -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;;; TODO - Enable Spell Check for Org Mode
@@ -9,22 +9,22 @@
 
 
 ;;; Global user variables
-(defvar *gx-org-denote-directory* "~/Documents/org/"
+(defvar *r2-org-denote-directory* "~/Documents/org/"
   "Directory where org files & denotes are kept.")
 
 
 
 ;;; Configure the ALMIGHTY Org system
 
-(defmacro gx/add-template->org-capture (&rest body)
+(defmacro r2/add-template->org-capture (&rest body)
   "Template macro add BODY which is of org-template format to list."
   `(with-eval-after-load 'org-mode
      (add-to-list 'org-capture-templates ',@body)))
 
 (use-package org
   :ensure nil
-  :hook ((org-mode . gx/org-fonts-hookfn)
-         (org-mode . gx/org-latex-hookfn))
+  :hook ((org-mode . r2/org-fonts-hookfn)
+         (org-mode . r2/org-latex-hookfn))
   :bind (("C-c a" . org-agenda)
          ("C-c c" . org-capture))
   :custom
@@ -82,13 +82,13 @@
                           "Configure Babel Programming Language Execution")
   (org-agenda-files
    (list
-    (expand-file-name "agenda.org" *gx-org-denote-directory*)))
+    (expand-file-name "agenda.org" *r2-org-denote-directory*)))
   ;; Use Org to create Calendar entries (see calendar config below)
   (org-agenda-diary-file
-   (expand-file-name "calendar.org" *gx-org-denote-directory*))
+   (expand-file-name "calendar.org" *r2-org-denote-directory*))
   :config
   ;; Org Helper Hook Functions
-  (defun gx/org-fonts-hookfn ()
+  (defun r2/org-fonts-hookfn ()
     "Hook function enabling Org faces/fonts."
     ;; Set faces for heading levels
     (dolist
@@ -121,7 +121,7 @@
       (set-face-attribute (car face) nil
                           :inherit (cadr face))))
 
-  (defun gx/org-latex-hookfn ()
+  (defun r2/org-latex-hookfn ()
     "Hook function setting up configuration for Org using Latex."
 
     (setq org-latex-listings t
@@ -156,7 +156,7 @@
              ("conf-xorg" . conf-xdefaults)))
     (push lang org-src-lang-modes))
 
-  (defun gx/org-export-html-to-dir (dir)
+  (defun r2/org-export-html-to-dir (dir)
     "Export current Org file to HTML in DIR."
     (interactive "DExport to directory: ")
     (let ((default-directory dir))
@@ -220,7 +220,7 @@
   :after org
   :custom
   (calendar-mark-diary-entries-flag t)
-  (diary-file (expand-file-name "diary" *gx-org-denote-directory*)))
+  (diary-file (expand-file-name "diary" *r2-org-denote-directory*)))
 
 
 
@@ -242,20 +242,20 @@
          (denote-dired-mode . dired-hide-details-mode)
          (denote-dired-mode . all-the-icons-dired-mode))
 
-  :bind (("C-c n j" . gx/denote-journal)
+  :bind (("C-c n j" . r2/denote-journal)
          ("C-c n n" . denote))
   :custom
-  (denote-directory *gx-org-denote-directory* )
+  (denote-directory *r2-org-denote-directory* )
   (denote-dired-directories-include-subdirectories t)
   (denote-dired-directories
    (list
-    (expand-file-name *gx-org-denote-directory*)
-    (expand-file-name "notes/inbox"     *gx-org-denote-directory*)
-    (expand-file-name "notes/meetings"  *gx-org-denote-directory*)
-    (expand-file-name "notes/research"  *gx-org-denote-directory*)
-    (expand-file-name "notes/reference" *gx-org-denote-directory*)
-    (expand-file-name "notes/scratch"   *gx-org-denote-directory*)
-    (expand-file-name "notes/trash"     *gx-org-denote-directory*)))
+    (expand-file-name *r2-org-denote-directory*)
+    (expand-file-name "notes/inbox"     *r2-org-denote-directory*)
+    (expand-file-name "notes/meetings"  *r2-org-denote-directory*)
+    (expand-file-name "notes/research"  *r2-org-denote-directory*)
+    (expand-file-name "notes/reference" *r2-org-denote-directory*)
+    (expand-file-name "notes/scratch"   *r2-org-denote-directory*)
+    (expand-file-name "notes/trash"     *r2-org-denote-directory*)))
   (denote-known-keywords '("emacs"
                            "ideas"
                            "journal"
@@ -272,7 +272,7 @@
   (denote-link-fontify-backlinks t)
   (denote-org-capture-specifiers "%l\n%i\n%?)")
   :config
-  (gx/add-template->org-capture
+  (r2/add-template->org-capture
    ;; Template 1
    ("n" "New Note (with denote.el)"
     plain
@@ -283,7 +283,7 @@
     :kill-buffer t
     :jump-to-captured t))
 
-  (gx/add-template->org-capture
+  (r2/add-template->org-capture
    ;; Template 2
    ("s" "Scratch Note (with denote.el)"
     plain
@@ -294,7 +294,7 @@
     :kill-buffer t
     :jump-to-captured t))
 
-  (defun gx/denote-journal ()
+  (defun r2/denote-journal ()
     "Create an entry tagged 'journal', while prompting for a title."
     (interactive)
     (denote
@@ -307,5 +307,5 @@
 
 
 
-(provide 'gx-org)
-;;; gx-org.el ends here
+(provide 'r2-org)
+;;; r2-org.el ends here

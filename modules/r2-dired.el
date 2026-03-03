@@ -1,4 +1,4 @@
-;;; gx-dired.el --- Advanced Configuration for Dired -*- lexical-binding: t -*-
+;;; r2-dired.el --- Advanced Configuration for Dired -*- lexical-binding: t -*-
 
 ;;; Commentary:
 ;;;
@@ -80,5 +80,5 @@
 
 
 
-(provide 'gx-dired)
-;;; gx-dired.el ends here
+(provide 'r2-dired)
+;;; r2-dired.el ends here

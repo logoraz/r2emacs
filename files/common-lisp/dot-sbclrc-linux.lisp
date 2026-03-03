@@ -1,14 +1,16 @@
 ;;;; dot-sbclrc.lisp -> .sbclrc - SBCL Initialization File
 
 ;;; Enable Advanced SBCL Features
-(ignore-errors (require :asdf)
-               (require :uiop)
-               (require :sb-aclrepl)
-               (require :sb-rotate-byte)
-               (require :sb-cltl2))
+(handler-bind ((warning #'muffle-warning))
+  (require :asdf)
+  (require :uiop)
+  (require :sb-aclrepl)
+  (require :sb-rotate-byte)
+  (require :sb-cltl2))
 
 (when (find-package 'sb-aclrepl)
   (push :aclrepl cl:*features*))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -54,15 +56,16 @@
 ;; I wrap this initializing with `ignore-errors` so that the CL implementation
 ;; fails quietly...
 
-;; #-ocicl
-;; (ignore-errors
-;;   (when (probe-file (uiop:xdg-data-home #P"ocicl/ocicl-runtime.lisp"))
-;;     (load (uiop:xdg-data-home #P"ocicl/ocicl-runtime.lisp")))
-;;   (asdf:initialize-source-registry
-;;    (list :source-registry
-;;          ;; Needed to store non-available ocicl systems in ocicl/
-;;          (list :tree (uiop:getcwd))
-;;          :inherit-configuration)))
+#-ocicl
+(ignore-errors
+  (let ((ocicl-runtime (uiop:xdg-data-home #P"ocicl/ocicl-runtime.lisp")))
+    (when (probe-file ocicl-runtime)
+      (load ocicl-runtime)))
+  (asdf:initialize-source-registry
+   (list :source-registry
+         ;; Keyword :tree needed to find self-vendored non-available ocicl systems in ocicl/
+         (list :tree (uiop:getcwd))
+         :inherit-configuration)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;

@@ -1,4 +1,4 @@
-;;; gx-completions.el --- Completions Framework -*- lexical-binding: t -*-
+;;; r2-completions.el --- Completions Framework -*- lexical-binding: t -*-
 
 ;;; Commentary:
 
@@ -29,7 +29,7 @@
   :diminish mct-mode
   :demand t
   :bind (:map minibuffer-local-filename-completion-map
-              ("DEL" . gx/backward-updir)
+              ("DEL" . r2/backward-updir)
               :map minibuffer-local-completion-map
               ("SPC" . nil)
               ("?"   . nil))
@@ -50,7 +50,7 @@
                                                orderless)))))
   :config
   ;; Prot's adaptation of `icomplete-fido-backward-updir'.
-  (defun gx/backward-updir ()
+  (defun r2/backward-updir ()
     "Delete char before point or go up a directory."
     (interactive nil mct-mode)
     (cond
@@ -86,6 +86,11 @@
   (corfu-default ((t (:background "#2e3440" :foreground "#d8dee9"))))
   (corfu-current ((t (:background "#5e81ac" :foreground "#eceff4"))))
   :config
+  (when (eq system-type 'windows-nt)
+    ;; Need to reapply here due to load order in windows
+    (custom-set-faces
+     '(corfu-default ((t (:background "#2e3440" :foreground "#d8dee9"))))
+     '(corfu-current ((t (:background "#5e81ac" :foreground "#eceff4"))))))
   ;; Needed for customization/control of other variables that interfere with corfu
   (setq text-mode-ispell-word-completion nil
         read-extended-command-predicate #'command-completion-default-include-p
@@ -96,5 +101,5 @@
 
 
 
-(provide 'gx-completions)
-;;; gx-completions.el ends here
+(provide 'r2-completions)
+;;; r2-completions.el ends here

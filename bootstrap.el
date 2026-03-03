@@ -7,7 +7,7 @@
 
 ;;; Code:
 
-(defun gx/create-symlink (target link)
+(defun r2/create-symlink (target link)
   "Create a symlink, LINK of TARGET."
   (let ((target (expand-file-name target))
         (link (expand-file-name link)))
@@ -17,7 +17,7 @@
 
 
 ;;; Backup System for configs
-(defun gx/archive-old-configs ()
+(defun r2/archive-old-configs ()
   "Rename old Emacs config files and directories to avoid conflicts."
   (let ((old-files '("~/.emacs" "~/.emacs.el"))
         (old-dir "~/.emacs.d")
@@ -38,41 +38,45 @@
 
 
 ;;; Deploy
-(defun gx/deploy-config ()
-  "Deploy gxEmacs config."
-  (message "Starting gxEmacs configuration bootstrap...")
-  (gx/archive-old-configs)
-  (gx/create-symlink "~/Work/emacs-config" "~/.config/emacs")
+(defun r2/deploy-config ()
+  "Deploy r2Emacs config."
+  (message "Starting r2Emacs configuration bootstrap...")
+  (r2/archive-old-configs)
+  (r2/create-symlink "~/Work/r2emacs" "~/.config/emacs")
   (message "Bootstrap complete!"))
 
-(defun gx/deploy-sbclrc ()
+(defun r2/deploy-sbclrc ()
   "Copy reference sbclrc, SOURCE, to DESTINATION."
   (pcase system-type
-    ('windows-nt (gx/create-symlink
+    ('windows-nt (r2/create-symlink
                   (expand-file-name "dot-sbclrc-windows.lisp"
                                     "~/.emacs.d/files/common-lisp")
                   (expand-file-name ".sbclrc" "~")))
-    ('gnu/linux (gx/create-symlink
+    ('gnu/linux (r2/create-symlink
                  (expand-file-name "dot-sbclrc-linux.lisp"
-                                   "~/Work/emacs-config/files/common-lisp")
+                                   "~/.config/emacs/files/common-lisp")
                  (expand-file-name ".sbclrc" "~"))))
   (message "SBCLRC deployed"))
 
-(defun gx/deploy-eclrc ()
+(defun r2/deploy-eclrc ()
   "Copy reference eclrc, SOURCE, to DESTINATION."
   (pcase system-type
-    ('gnu/linux (gx/create-symlink
+    ('gnu/linux (r2/create-symlink
                  (expand-file-name "dot-eclrc-linux.lisp"
-                                   "~/Work/emacs-config/files/common-lisp")
-                 (expand-file-name ".eclrc" "~"))))
+                                   "~/.config/emacs/files/common-lisp")
+                 (expand-file-name ".eclrc" "~")))
+    ('windows-nt (r2/create-symlink
+                  (expand-file-name "dot-eclrc-windows.lisp"
+                                    "~/.emacs.d/files/common-lisp")
+                  (expand-file-name ".eclrc" "~"))))
   (message "ECLRC deployed"))
 
-
-(if (eq system-type 'gnu/linux) (gx/deploy-config))
+;; (if (eq system-type 'gnu/linux) (r2/deploy-config))
 
 (when (eq system-type 'gnu/linux)
-  (gx/deploy-sbclrc)
-  (gx/deploy-eclrc))
+  (message "Deploying r2Emacs Bootstrap Common Lisp Environment...")
+  (r2/deploy-sbclrc)
+  (r2/deploy-eclrc))
 
 
 

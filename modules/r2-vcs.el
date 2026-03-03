@@ -1,4 +1,4 @@
-;;; gx-vcs.el --- CL IDE -*- lexical-binding: t -*-
+;;; r2-vcs.el --- CL IDE -*- lexical-binding: t -*-
 
 ;;; Commentary:
 
@@ -15,7 +15,7 @@
   (vc-follow-symlinks t)
   :config
   (setq auto-revert-verbose nil)
-  (gx/ignore-messages
+  (r2/ignore-messages
     (global-auto-revert-mode)))
 
 
@@ -53,21 +53,21 @@
   :after vc
   :bind
   (:map vc-dir-git-mode-map
-        ("r i" . gx/vc-git-rebase)
+        ("r i" . r2/vc-git-rebase)
         ("P"   . vc-push)
         ("U"   . vc-pull)
-        ("F"   . gx/vc-git-push-force))
+        ("F"   . r2/vc-git-push-force))
   :custom
   (vc-git-diff-switches '("-w"))  ; Ignore whitespace in diffs
   (vc-git-print-log-follow t)     ; Follow file renames in log
   :config
-  (defun gx/vc-git-rebase (commit)
+  (defun r2/vc-git-rebase (commit)
     "Interactive rebase from COMMIT"
     (interactive "sRebase from (HEAD~N or commit): ")
     (let ((default-directory (vc-root-dir)))
       (async-shell-command (format "git rebase -i %s" commit))))
 
-  (defun gx/vc-git-push-force ()
+  (defun r2/vc-git-push-force ()
     "Force push to remote."
     (interactive)
     (let ((default-directory (vc-root-dir)))
@@ -77,5 +77,5 @@
 
 
 
-(provide 'gx-vcs)
-;;; gx-vcs.el ends here
+(provide 'r2-vcs)
+;;; r2-vcs.el ends here

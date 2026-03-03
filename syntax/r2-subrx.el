@@ -1,4 +1,4 @@
-;;; gx-subrx.el --- Emacs Lisp Subroutines Xtra -*- lexical-binding: t -*-
+;;; r2-subrx.el --- Emacs Lisp Subroutines Xtra -*- lexical-binding: t -*-
 
 ;;; Commentary:
 
@@ -12,14 +12,14 @@
 ;;; Helper Functions
 
 ;;;###autoload
-(defun gx/run-in-background (command)
+(defun r2/run-in-background (command)
   "Run COMMAND with arguments in background provided last argument is '&'."
   (let ((command-parts (split-string command "[ ]+")))
     (apply #'call-process
            `(,(car command-parts) nil 0 nil ,@(cdr command-parts)))))
 
 ;;;###autoload
-(defun gx/run-command-with-output (command &optional filter message)
+(defun r2/run-command-with-output (command &optional filter message)
   "Run COMMAND providing output, optionally formatted with FILTER and MESSAGE."
   (unless (stringp command)
     (error "Command provided must be a string: %s" command))
@@ -34,7 +34,7 @@
 
 ;; Facile passing of lists to `set-face-attribute', use only in theme setting.
 ;;;###autoload
-(defun gx/set-face-attribute (face spec)
+(defun r2/set-face-attribute (face spec)
   "Set attributes FACE from SPEC.
 FACE is expected to be a symbol with the same faces
 as accepted by `set-face-attribute'.
@@ -51,7 +51,7 @@ FRAME is always set to nil"
     (add-to-list list-var item)))
 
 ;;;###autoload
-(defun gx/ensure-directory-exists (directory)
+(defun r2/ensure-directory-exists (directory)
   "Ensure DIRECTORY exists by creating it if it doesn't."
   (let ((target-directory (expand-file-name directory)))
     (unless (file-directory-p target-directory)
@@ -62,7 +62,7 @@ FRAME is always set to nil"
 ;;; Emacs Lisp Syntax Extensions (aka Macros)
 
 ;;;###autoload
-(defmacro gx/use-modules (&rest modules)
+(defmacro r2/use-modules (&rest modules)
   "Conveniency macro that requires multiple MODULES."
   (declare (debug setq))
   (unless (symbolp (car modules))
@@ -75,7 +75,7 @@ FRAME is always set to nil"
 
 
 ;;;###autoload
-(defmacro gx/ignore-messages (&rest body)
+(defmacro r2/ignore-messages (&rest body)
   "Ignore messages for BODY of called functions."
   (declare (indent 0))
   `(let ((inhibit-message t)
@@ -84,10 +84,10 @@ FRAME is always set to nil"
 
 
 
-;;; Customize/Enhance setopt --> gx/setopts
+;;; Customize/Enhance setopt --> r2/setopts
 
 ;;;###autoload
-(defmacro gx/setopts (&rest pairs)
+(defmacro r2/setopts (&rest pairs)
   "Set VARIABLE/VALUE/[COMMENT] PAIRS, and return the final VALUE.
 This is like `setq', but is meant for user options instead of
 plain variables.  This means that `setopts' will execute any
@@ -107,16 +107,16 @@ even if it doesn't match the type.)
       (unless (symbolp (car pairs))
         (error "Attempting to set a non-symbol: %s" (car pairs)))
       (cond ((stringp (caddr pairs))
-             (push `(gx/setopts--set ',(car pairs) ,(cadr pairs) ,(caddr pairs))
+             (push `(r2/setopts--set ',(car pairs) ,(cadr pairs) ,(caddr pairs))
                    expr)
              (setq pairs (cdddr pairs)))
             (t ;; defaults to what setopt does...
-             (push `(gx/setopts--set ',(car pairs) ,(cadr pairs)) expr)
+             (push `(r2/setopts--set ',(car pairs) ,(cadr pairs)) expr)
              (setq pairs (cddr pairs)))))
     (macroexp-progn (nreverse expr))))
 
 ;;;###autoload
-(defun gx/setopts--set (variable value &optional comment)
+(defun r2/setopts--set (variable value &optional comment)
   "Set VALUE and optionally COMMENT to VARIABLE using `custom-set'."
   (custom-load-symbol variable)
   ;; Check that the type is correct.
@@ -136,79 +136,7 @@ even if it doesn't match the type.)
 
 
 
-;;; Hygenic Hooks Syntax
-
-;; Keep Hook Functions & Hooks Hygenic...
-;;;###autoload
-(defun gx/flatten-list-one-level (list)
-  "Flatten LIST by one level."
-  (mapcan #'identity list))
-
-;;;###autoload
-(defmacro gx->defhook (symbol doc body &rest pairs)
-  "Always create a well-defined hook function using DOC and BODY for SYMBOL.
-Provide hook parameters from PAIRS of form :KEYWORD VALUE.
-
-The following keywords are meaninful:
-
-:hook  VALUE should be a variable type designating the hook which function named
-       SYMBOL should be associated with.  VALUE may be a single hook, or a list
-       of hooks.
-:depth VALUE should conform `add-hook' spec for optional values.
-:local VALUE should conform `add-hook' spec for optional values.
-:args  VALUE should be a list of args, i.e. (arg1 arg2 ...) or arg (singular)
-:defer VALUE should be an integer type designating the time in seconds to wait
-       after hook has been called before running body of function named SYMBOL.
-:disable? VALUE should be either nil (default) or t
-:tbd   tbd...
-
-\(fn SYMBOL [DOCSTRING] BODY KEYWORDS)"
-  (declare (doc-string 2) (debug (name body)) (indent defun))
-  (let ((disabled nil) (hooks nil) (depth 0) (local nil) (args '())
-        (time nil) (exps '()))
-
-    (while pairs
-      (let ((keyword (pop pairs)))
-        (unless (symbolp keyword)
-          (error "Junk in pairs %S" pairs))
-        (unless pairs
-          (error "Keyword %s is missing an argument" keyword))
-        (let ((value (pop pairs)))
-          (pcase keyword
-            (:hook (setq hooks (flatten-list value)))
-            (:depth (setq depth value))
-            (:local (setq local value))
-            (:args (setq args (flatten-list value)))
-            (:disable? (setq disabled value))
-            (:defer (setq time value))))))
-
-    (unless (eval disabled)
-      (if time (setq body `((run-at-time ,time nil (lambda ,args ,@body)))))
-      (if (and doc (>= (length doc) 1)) (push `(defun ,symbol ,args ,doc ,@body) exps)
-        (push `(defun ,symbol ,args ,@body) exps))
-      (while hooks
-        (let (hook)
-          (setq hook (pop hooks))
-          (push `(add-hook ',hook #',symbol ,depth ,local) exps)))
-      `(progn . ,(nreverse exps)))))
-
-;;; Example usage
-;; (gx->defhook my-hook-func
-;;   "Hook function for testings"
-
-;;   (;;function body
-;;    (message "I am here!!! %s %s %s" first second third))
-
-;;   :disable? (eq system-type 'gnu/linux)
-;;   :hook (first-hook second-hook third-hook)
-;;   :depth 'append
-;;   :local 'local
-;;   :args (first second third)
-;;   :defer 3)
 
 
-
-
-
-(provide 'gx-subrx)
-;;; gx-subrx.el ends here
+(provide 'r2-subrx)
+;;; r2-subrx.el ends here

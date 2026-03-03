@@ -1,4 +1,4 @@
-;;; gx-clide.el --- CL IDE -*- lexical-binding: t -*-
+;;; r2-clide.el --- CL IDE -*- lexical-binding: t -*-
 
 ;;; Commentary:
 
@@ -13,13 +13,13 @@
 ;; (add-to-list 'interpreter-mode-alist '("Lisp" . lisp-mode))
 
 ;; .dir-local variables for development projects
-(gx/setopts enable-local-eval t
+(r2/setopts enable-local-eval t
             enable-local-variables :safe
             "Set the safe variables, and ignore the rest.")
 
 (set-default-coding-systems 'utf-8)
 
-(gx/setopts global-auto-revert-non-file-buffers t
+(r2/setopts global-auto-revert-non-file-buffers t
             tab-width 8
             indent-tabs-mode nil
             ;; "Use spaces instead of tabs."
@@ -47,7 +47,7 @@
   :config
   ;; Make fill-column-indicator face darker --> line-number face
   ;; theme value #5c5e5e --> #3f4040 (good with doom-tomorrow-night theme)
-  (gx/set-face-attribute 'fill-column-indicator '(:foreground "#3f4040")))
+  (r2/set-face-attribute 'fill-column-indicator '(:foreground "#3f4040")))
 
 (use-package eldoc
   :ensure nil
@@ -97,7 +97,7 @@
   :custom
   (undo-tree-history-directory-alist
    `(("." . ,(expand-file-name "undo-tree-hist/"
-                               gx-var-directory))))
+                               r2-var-directory))))
   :config
   (setq kill-do-not-save-duplicates t))
 
@@ -134,19 +134,21 @@
 ;;; Shells
 (use-package eat
   :if (eq system-type 'gnu/linux)
-  :ensure t)
+  :ensure t
+  :bind (:map eat-semi-char-mode-map
+              ("M-o" . ace-window)))
 
 (use-package shell
   :if (eq system-type 'windows-nt)
   :ensure nil
-  :hook (shell-mode . gx/shell-config)
+  :hook (shell-mode . r2/shell-config)
   :bind (:map shell-mode-map
               ("C-c l" . comint-clear-buffer))
   :init
   ;; Use PowerShell 7 for `M-x shell`
   (setq explicit-shell-file-name
-        (concat "C:/Program Files/WindowsApps/"
-                "Microsoft.PowerShell_7.5.4.0_x64__8wekyb3d8bbwe/pwsh.exe"))
+        (concat "C:/Users/erik.almaraz/AppData/Local/"
+                "Microsoft/WindowsApps/pwsh.exe"))
 
   ;; Arguments passed to pwsh.exe
   (setq explicit-pwsh.exe-args '())
@@ -155,12 +157,23 @@
   (setq shell-file-name explicit-shell-file-name)
 
   :config
-  (defun gx/shell-config ()
+  (defun r2/shell-config ()
     "Improve shell-mode behavior"
     (setq comint-prompt-read-only t
-                    comint-scroll-to-bottom-on-input t)
-              ;; Avoid command echo odities in some shells
-              (setq-local comint-process-echoes t)))
+          comint-scroll-to-bottom-on-input t)
+    ;; Avoid command echo odities in some shells
+    (setq-local comint-process-echoes t)))
+
+;;--------------------------------------------------------------------------------
+;; Keep for reference
+(use-package powershell
+  :disable
+  :if (eq system-type 'windows-nt)
+  :load-path r2-contrib-directory       ; can load custom modules via use-package
+  ;; :vc (:url "https://github.com/jschaf/powershell.el" :branch "main")
+  :config
+  (setq explicit-powershell.exe-args '("-NoLogo" "-NoProfile")))
+;;--------------------------------------------------------------------------------
 
 (use-package neotree
   :ensure t
@@ -188,10 +201,10 @@
 
 
 ;;; Common Lisp IDE
-
 (use-package lisp-comment-dwim
-  :disabled ; experimental --> creates an unwanted project file in user directory
+  :disable
   :vc (:url "https://github.com/dotemacs/lisp-comment-dwim.el" :branch "main")
+  :custom (lisp-comment-dwim-comment-macro "#+nil")
   :config
   (lisp-comment-dwim-setup-keybindings))
 
@@ -199,9 +212,9 @@
   :ensure t
   ;; Enable sly IDE for Common Lisp
   :hook ((lisp-mode . sly-editing-mode)
-         (lisp-mode . gx/sly-auto-connect)
-         (sly-mode  . gx/sly-completions)
-         (sly-mrepl-mode  . gx/register-mrepl-frame))
+         (lisp-mode . r2/sly-auto-connect)
+         (sly-mode  . r2/sly-completions)
+         (sly-mrepl-mode  . r2/register-mrepl-frame))
   :custom
   (sly-default-lisp 'sbcl
                     "Set default lisp to Steel Bank Common Lisp.")
@@ -212,17 +225,18 @@
   ;; Provide proper syntax highlighting for `defsystem'
   (font-lock-add-keywords
    'lisp-mode
-   '(("(\\s-*\\(defsystem\\)\\>" 1 font-lock-keyword-face prepend)))
+   '(("(\\s-*\\(defsystem\\)\\>" 1 font-lock-keyword-face append)))
 
   ;; Invoke SLY with a negative prefix argument, M-- M-x sly,
   ;; and you can select a program from that list.
   (setq sly-lisp-implementations
-        '((sbcl ("vend" "repl" "sbcl") :coding-system utf-8-unix)
-          (ecl  ("vend" "repl" "ecl")  :coding-system utf-8-unix)))
+        '((clasp ("clasp") :coding-system utf-8-unix)
+          (sbcl  ("sbcl") :coding-system utf-8-unix)
+          (ecl   ("ecl")  :coding-system utf-8-unix)))
 
   ;; Ensure history file exists
   (let ((history-file (expand-file-name "var/sly/mrepl-history"
-                                        gx-xdg-cache-home)))
+                                        r2-xdg-cache-home)))
     (make-directory (file-name-directory history-file) t)
     (unless (file-exists-p history-file)
       (write-region "" nil history-file)))
@@ -236,20 +250,20 @@
 
   ;; Register sly mrepl buffer with the frame it is openned with instead of it
   ;; being considered unassociated from setting it to the background..
-  (defun gx/register-mrepl-frame ()
+  (defun r2/register-mrepl-frame ()
     "Associates sly-mrepl buffer  with the curent frame."
     (beframe-assume-buffers-matching-regexp-all-frames "\\*sly-mrepl"))
 
   ;; Sly completions
   (setq sly-symbol-completion-mode nil)
 
-  (defun gx/sly-completions ()
+  (defun r2/sly-completions ()
     "Set flex to completion styles."
     (setq-local completion-styles '(sly--external-completion basic flex))
     (sly-symbol-completion-mode -1))
 
   ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
-  (defun gx/sly-auto-connect ()
+  (defun r2/sly-auto-connect ()
     (interactive)
     (unless (sly-connected-p)
       (save-excursion (sly)))))
@@ -259,7 +273,7 @@
 ;;; Guile Scheme IDE
 
 ;; Set default to guile.
-(gx/setopts scheme-program-name "guile")
+(r2/setopts scheme-program-name "guile")
 
 ;; `emacs-guix' dependencies:
 ;; emacs-bui, emacs-dash, emacs-edit-indirect,
@@ -277,7 +291,7 @@
   ;; Prevent `geiser' from interfering into completion (CAPF)
   (setq geiser-mode-auto-p nil)
 
-  (defvar gx/ares-rs--process nil
+  (defvar r2/ares-rs--process nil
     "Holds process for Ares nREPL RPC server.")
 
   (defun get-project-root-or-cwd ()
@@ -285,27 +299,27 @@
     (or (project-root (project-current))
         default-directory))
 
-  (defun gx/kill-ares-nrepl ()
+  (defun r2/kill-ares-nrepl ()
     "Kill Ares RS nREPL RPC server."
     (interactive)
-    (when gx/ares-rs--process
+    (when r2/ares-rs--process
       (ignore-errors
-        (kill-process gx/ares-rs--process)
+        (kill-process r2/ares-rs--process)
         (let ((port-file (expand-file-name
                           (concat (get-project-root-or-cwd)
                                   ".nrepl-port"))))
           (when (file-exists-p port-file)
             (delete-file port-file))))
-      (setq gx/ares-rs--process nil)))
+      (setq r2/ares-rs--process nil)))
 
-  (defun gx/ares-nrepl-start ()
+  (defun r2/ares-nrepl-start ()
     "Start Ares nREPL RPC server in Project Root or CWD."
     (interactive)
 
     (let* ((path (get-project-root-or-cwd))
            (bname (concat "*" (symbol-name (gensym "ares-nrepl-process-")) "*")))
-      (gx/kill-ares-nrepl)
-      (setq gx/ares-rs--process
+      (r2/kill-ares-nrepl)
+      (setq r2/ares-rs--process
             (start-process-shell-command
              bname
              (get-buffer-create bname)
@@ -314,7 +328,7 @@
                      " -- "
                      "-L " path)))
       ;; Automatically start sesman session
-      (when gx/ares-rs--process
+      (when r2/ares-rs--process
         (ignore-errors
          (sesman-link-with-least-specific))))))
 
@@ -331,12 +345,12 @@
   :vc (:url "https://github.com/ayanyan/vba-mode.git" :rev :newest)
   :mode ("\\.\\(vba\\|bas\\|cls\\|frm\\)\\'" . vba-mode)
   :hook ((vba-mode . font-lock-mode)
-         (vba-mode . gx/vba-config))
+         (vba-mode . r2/vba-config))
   :config
 
   ;; Hacks to fix where vba-mode gets it wrong.
   ;; TOTO:--> fork repo and correct therein
-  (defun gx/vba-config ()
+  (defun r2/vba-config ()
     "Set configuration for vba"
     (setq-local tab-width 4
                 indent-tabs-mode nil)
@@ -388,5 +402,5 @@
 
 
 
-(provide 'gx-clide)
-;;; gx-clide.el ends here
+(provide 'r2-clide)
+;;; r2-clide.el ends here

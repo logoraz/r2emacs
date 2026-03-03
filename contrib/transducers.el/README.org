@@ -1,0 +1,1400 @@
+#+title: Transducers: Ergonomic, efficient data processing
+
+#+begin_quote
+I think Transducers are a fundamental primitive that decouples critical logic
+from list/sequence processing, and if I had to do Clojure all over I would put
+them at the bottom.
+
+-- Rich Hickey
+#+end_quote
+
+Transducers are an ergonomic and extremely memory-efficient way to process a
+data source. Here "data source" means simple collections like Lists or Vectors,
+but also potentially large files or generators of infinite data.
+
+Transducers...
+
+- allow the chaining of operations like =map= and =filter= without allocating memory between each step.
+- aren't tied to any specific data type; they need only be implemented once.
+- vastly simplify "data transformation code".
+- have nothing to do with "lazy evaluation".
+- are a joy to use!
+
+Example: /While skipping every second line of a file, sum the lengths of only
+evenly-lengthed lines./
+
+#+begin_src emacs-lisp :exports both
+(t-transduce
+  ;; How do we want to process each element?
+  (t-comp (t-step 2) (t-map #'length) (t-filter #'cl-evenp))
+  ;; How do we want to combine all the elements together?
+  #'+
+  ;; What's our original data source?
+  (t-file-read "README.org"))
+#+end_src
+
+#+RESULTS:
+: 11184
+
+Looking for Transducers in other Lisps? Check out the [[https://github.com/fosskers/cl-transducers][Common Lisp]] and [[https://github.com/fosskers/transducers.fnl][Fennel]]
+implementations!
+
+* Table of Contents :TOC_5_gh:noexport:
+- [[#history-and-motivation][History and Motivation]]
+- [[#installation][Installation]]
+- [[#usage][Usage]]
+  - [[#importing][Importing]]
+  - [[#transducers-reducers-and-sources][Transducers, Reducers, and Sources]]
+- [[#api][API]]
+  - [[#transducers][Transducers]]
+    - [[#t-pass-t-map][t-pass, t-map]]
+    - [[#t-filter-t-filter-map-t-unique-t-unique-by-t-dedup][t-filter, t-filter-map, t-unique, t-unique-by, t-dedup]]
+    - [[#t-drop-t-drop-while-t-take-t-take-while][t-drop, t-drop-while, t-take, t-take-while]]
+    - [[#t-uncons-t-concatenate-t-flatten][t-uncons, t-concatenate, t-flatten]]
+    - [[#t-segment-t-window-t-group-by][t-segment, t-window, t-group-by]]
+    - [[#t-intersperse-t-enumerate-t-step-t-scan][t-intersperse, t-enumerate, t-step, t-scan]]
+    - [[#t-once][t-once]]
+    - [[#t-log][t-log]]
+    - [[#t-from-csv-t-into-csv][t-from-csv, t-into-csv]]
+  - [[#reducers][Reducers]]
+    - [[#t-cons-t-snoc][t-cons, t-snoc]]
+    - [[#t-vector][t-vector]]
+    - [[#t-string][t-string]]
+    - [[#t-hash-table][t-hash-table]]
+    - [[#t-count-t-average-t-median-t-quantities][t-count, t-average, t-median, t-quantities]]
+    - [[#t-any-t-all][t-any?, t-all?]]
+    - [[#t-partition][t-partition]]
+    - [[#t-first-t-last-t-find][t-first, t-last, t-find]]
+    - [[#t-fold][t-fold]]
+    - [[#t-for][t-for]]
+    - [[#t-into-json-buffer][t-into-json-buffer]]
+  - [[#sources][Sources]]
+    - [[#t-ints-t-random][t-ints, t-random]]
+    - [[#t-cycle-t-repeat-t-shuffle][t-cycle, t-repeat, t-shuffle]]
+    - [[#t-plist][t-plist]]
+    - [[#t-reversed][t-reversed]]
+    - [[#t-buffer-read-t-file-read][t-buffer-read, t-file-read]]
+    - [[#t-from-json-buffer][t-from-json-buffer]]
+  - [[#utilities][Utilities]]
+    - [[#t-comp-t-const][t-comp, t-const]]
+    - [[#t-reduced-t-reduced-t-reduced-val][t-reduced, t-reduced?, t-reduced-val]]
+- [[#example-gallery][Example Gallery]]
+  - [[#words-in-a-file][Words in a File]]
+  - [[#splitting-a-string-by-its-lines][Splitting a string by its lines]]
+  - [[#reading-and-writing-csv-data][Reading and Writing CSV data]]
+  - [[#reading-and-writing-json-data][Reading and Writing JSON data]]
+  - [[#reducing-into-property-lists-and-assocation-lists][Reducing into Property Lists and Assocation Lists]]
+  - [[#overwriting-a-buffer][Overwriting a Buffer]]
+- [[#writing-your-own-primitives][Writing your own Primitives]]
+  - [[#transducers-1][Transducers]]
+    - [[#t-map---a-simple-transformation][t-map - A simple transformation]]
+    - [[#t-filter---ignoring-input][t-filter - Ignoring input]]
+    - [[#t-take-while---short-circuiting][t-take-while - Short-circuiting]]
+    - [[#t-unique---stateful-transduction][t-unique - Stateful transduction]]
+  - [[#reducers-1][Reducers]]
+    - [[#t-count---simple-cumulative-state][t-count - Simple cumulative state]]
+    - [[#t-cons---some-post-processing][t-cons - Some post-processing]]
+    - [[#t-any---short-circuiting][t-any? - Short-circuiting]]
+  - [[#sources-1][Sources]]
+- [[#resources][Resources]]
+
+* History and Motivation
+
+Originally invented in Clojure and later adapted to other Lisps, Transducers are
+an excellent way to think about - and efficiently operate on - collections or
+streams of data. Transduction operations are strict and don't involve "laziness"
+or "thunking" in any way, yet only process the exact amount of data you ask them
+to.
+
+This library is mostly a port of the [[https://github.com/fosskers/cl-transducers][Common Lisp implementation]], with a few
+alterations to account for the minor differences between Common Lisp and Emacs
+Lisp.
+
+* Installation
+
+This package is [[https://melpa.org/#/transducers][available on MELPA]].
+
+* Usage
+
+** Importing
+
+Since this is just a library, you can import it as usual:
+
+#+begin_src emacs-lisp
+(require 'transducers)
+#+end_src
+
+Every function in the library is prefixed by =transducers-= but you're encouraged
+to use ~read-symbol-shorthands~ to shorten this to =t-=. This can be done
+interactively in your own files via ~add-file-local-variable~, which you
+can use to set this at the bottom of your file:
+
+#+begin_src emacs-lisp
+;; Local Variables:
+;; read-symbol-shorthands: (("t-" . "transducers-"))
+;; End:
+#+end_src
+
+After this, you can make relatively clean calls like:
+
+#+begin_src emacs-lisp :exports both
+(t-transduce (t-map #'1+) #'t-vector '(1 2 3))
+#+end_src
+
+#+RESULTS:
+: [2 3 4]
+
+This can also be done in =.org= files, so that Transducers can be used in their
+short forms even in Babel source blocks. That's exactly what this README does!
+
+The remaining examples below use =t-= for brevity.
+
+** Transducers, Reducers, and Sources
+
+#+begin_src emacs-lisp
+;; The fundamental pattern.
+(t-transduce <transducer-chain> <reducer> <source>)
+#+end_src
+
+Data processing largely has three concerns:
+
+1. Where is my data coming from? (sources)
+2. What do I want to do to each element? (transducers)
+3. How do I want to collect the results? (reducers)
+
+Each full "transduction" requires all three. We pass one of each to the
+=t-transduce= function, which drives the process. It knows how to pull values from
+the source, feed them through the transducer chain, and wrap everything together
+via the reducer.
+
+- Typical transducers are =t-map=, =t-filter=, and =t-take=.
+- Typical reducers are =+=, =t-count=, =t-cons=, and =t-fold=.
+- Typical sources are lists, vectors, strings, hash tables, and files.
+
+/Generators/ are a special kind of source that yield infinite data. Typical
+generators are =t-repeat=, =t-cycle=, and =t-ints=.
+
+Let's sum the squares of the first 1000 odd integers:
+
+#+begin_src emacs-lisp :exports both
+(t-transduce
+ (t-comp (t-filter #'cl-oddp)          ;; (2) Keep only odd numbers.
+         (t-take 1000)                 ;; (3) Keep the first 1000 filtered odds.
+         (t-map (lambda (n) (* n n)))) ;; (4) Square those 1000.
+ #'+         ;; (5) Reducer: Add up all the squares.
+ (t-ints 1)) ;; (1) Source: Generate all positive integers.
+#+end_src
+
+#+RESULTS:
+: 1333333000
+
+Two things of note here:
+
+1. =t-comp= is used here to chain together different transducer steps. Notice that
+   the order appears "backwards" from usual function composition. It may help to
+   imagine that =t-comp= is acting like the =thread-last= macro here.
+2. The reduction via =+= is listed as Step 5, but really it's occuring throughout
+   the transduction process. Each value that makes it through the composed
+   transducer chain is immediately added to an internal accumulator.
+
+Explore the other transducers and reducers to see what's possible! You'll never
+write a =loop= again.
+
+* API
+
+The examples here use show each symbol prefixed by ~t-~, but recall that you'll
+need to set an explicit shorthand for this to work. When searching in-editor
+documentation, each symbol is prefixed fully by ~transducers-~.
+
+** Transducers
+
+Transducers describe how to alter the items of some stream of values. Some
+transducers, like ~t-take~, can short-circuit.
+
+Multiple transducer functions can be chained together with ~t-comp~.
+
+*** t-pass, t-map
+
+Just pass along each value of the transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-pass #'t-cons '(1 2 3))
+#+end_src
+
+#+RESULTS:
+: (1 2 3)
+
+Apply a function F to all elements of the transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-map #'1+) #'t-cons '(1 2 3))
+#+end_src
+
+#+RESULTS:
+: (2 3 4)
+
+*** t-filter, t-filter-map, t-unique, t-unique-by, t-dedup
+
+Only keep elements from the transduction that satisfy PRED.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-filter #'cl-evenp) #'t-cons '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: (2 4)
+
+Apply a function F to the elements of the transduction, but only keep results
+that are non-nil.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-filter-map #'cl-first) #'t-cons '(() (2 3) () (5 6) () (8 9)))
+#+end_src
+
+#+RESULTS:
+: (2 5 8)
+
+Only allow values to pass through the transduction once each. Stateful; this
+uses a hash table internally so could get quite heavy if you're not careful.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-unique #'t-cons '(1 2 1 3 2 1 2 "abc"))
+#+end_src
+
+#+RESULTS:
+: (1 2 3 "abc")
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-unique-by #'cdr) #'t-cons '((:a . 1) (:b . 2) (:c . 1) (:d . 3)))
+#+end_src
+
+#+RESULTS:
+: ((:a . 1) (:b . 2) (:d . 3))
+
+Remove adjacent duplicates from the transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-dedup #'t-cons '(1 1 1 2 2 2 3 3 3 4 3 3))
+#+end_src
+
+#+RESULTS:
+: (1 2 3 4 3)
+
+*** t-drop, t-drop-while, t-take, t-take-while
+
+Drop the first N elements of the transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-drop 3) #'t-cons '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: (4 5)
+
+Drop elements from the front of the transduction that satisfy PRED.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-drop-while #'cl-evenp) #'t-cons '(2 4 6 7 8 9))
+#+end_src
+
+#+RESULTS:
+: (7 8 9)
+
+Keep only the first N elements of the transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take 3) #'t-cons '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: (1 2 3)
+
+Keep only elements which satisfy a given PRED, and stop the transduction as soon
+as any element fails the test.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take-while #'cl-evenp) #'t-cons '(2 4 6 8 9 2))
+#+end_src
+
+#+RESULTS:
+: (2 4 6 8)
+
+*** t-uncons, t-concatenate, t-flatten
+
+Split up a transduction of cons cells.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-uncons #'t-cons '((:a . 1) (:b . 2) (:c . 3)))
+#+end_src
+
+#+RESULTS:
+: (:a 1 :b 2 :c 3)
+
+Concatenate all the sublists, subvectors, or substrings in the transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-concatenate #'t-cons '((1 2 3) [4 5 6] (7 8 9)))
+#+end_src
+
+#+RESULTS:
+: (1 2 3 4 5 6 7 8 9)
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-comp #'t-concatenate (t-intersperse ?!))
+             #'t-string '("hello" "there"))
+#+end_src
+
+#+RESULTS:
+: "h!e!l!l!o!t!h!e!r!e"
+
+Entirely flatten all lists/arrays/strings in the transduction, regardless of
+nesting.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-flatten #'t-cons '((1 2 3) 0 (4 (5) 6) 0 (7 [8] 9) 0))
+#+end_src
+
+#+RESULTS:
+: (1 2 3 0 4 5 6 0 7 8 9 0)
+
+*** t-segment, t-window, t-group-by
+
+Partition the input into lists of N items. If the input stops, flush any
+accumulated state, which may be shorter than N.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-segment 3) #'t-cons '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: ((1 2 3) (4 5))
+
+Yield N-length windows of overlapping values. This is different from ~segment~
+which yields non-overlapping windows. If there were fewer items in the input
+than N, then this yields nothing.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-window 3) #'t-cons '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: ((1 2 3) (2 3 4) (3 4 5))
+
+Group the input stream into sublists via some function F. The cutoff criterion
+is whether the return value of F changes between two consecutive elements of the
+transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-group-by #'cl-evenp) #'t-cons '(2 4 6 7 9 1 2 4 6 3))
+#+end_src
+
+#+RESULTS:
+: ((2 4 6) (7 9 1) (2 4 6) (3))
+
+*** t-intersperse, t-enumerate, t-step, t-scan
+
+Insert an ELEM between each value of the transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-intersperse 0) #'t-cons '(1 2 3))
+#+end_src
+
+#+RESULTS:
+: (1 0 2 0 3)
+
+Index every value passed through the transduction into a cons pair. Starts at 0.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-enumerate #'t-cons '("a" "b" "c"))
+#+end_src
+
+#+RESULTS:
+: ((0 . "a") (1 . "b") (2 . "c"))
+
+Only yield every Nth element of the transduction. The first element of the
+transduction is always included.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-step 2) #'t-cons '(1 2 3 4 5 6 7 8 9))
+#+end_src
+
+#+RESULTS:
+: (1 3 5 7 9)
+
+Build up successsive values from the results of previous applications of a given
+function F.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-scan #'+ 0) #'t-cons '(1 2 3 4))
+#+end_src
+
+#+RESULTS:
+: (0 1 3 6 10)
+
+*** t-once
+
+Inject some ITEM onto the front of the transduction.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-comp (t-filter (lambda (n) (> n 10)))
+                     (t-once 'hello)
+                     (t-take 3))
+             #'t-cons (t-ints 1))
+#+end_src
+
+#+RESULTS:
+: (hello 11 12)
+
+*** t-log
+
+Call some LOGGER function for each step of the transduction. The LOGGER must
+accept the running results and the current element as input. The original items
+of the transduction are passed through as-is.
+
+#+begin_src emacs-lisp :results output :exports both
+(t-transduce (t-log (lambda (_ n) (print! "Got: %d" n))) #'t-cons '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: Got: 1
+: Got: 2
+: Got: 3
+: Got: 4
+: Got: 5
+
+These are STDOUT results. The actual return value is the result of the reducer,
+in this case ~cons~, thus a list.
+
+*** t-from-csv, t-into-csv
+
+Interpret the data stream as CSV data.
+
+The first item found is assumed to be the header list, and it will be used to
+construct useable hashtables for all subsequent items.
+
+Note: This function makes no attempt to convert types from the original parsed
+strings. If you want numbers, you will need to further parse them yourself.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-comp #'t-from-csv
+                     (t-map (lambda (hm) (gethash "Name" hm))))
+             #'t-cons '("Name,Age" "Alice,35" "Bob,26"))
+#+end_src
+
+#+RESULTS:
+: ("Alice" "Bob")
+
+Given a sequence of HEADERS, rerender each item in the data stream into a CSV
+string. It's assumed that each item in the transduction is a hash table whose
+keys are strings that match the values found in HEADERS.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-comp #'t-from-csv
+                     (t-into-csv '("Name" "Age")))
+             #'t-cons '("Name,Age,Hair" "Alice,35,Blond" "Bob,26,Black"))
+#+end_src
+
+#+RESULTS:
+: ("Name,Age" "Alice,35" "Bob,26")
+
+** Reducers
+
+Reducers describe how to fold the stream of items down into a single result, be
+it either a new collection or a scalar.
+
+Some reducers, like ~t-first~, can also force the entire transduction to
+short-circuit.
+
+*** t-cons, t-snoc
+
+Collect all results as a list.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-pass #'t-cons '(1 2 3))
+#+end_src
+
+#+RESULTS:
+: (1 2 3)
+
+Collect all results as a list, but results are reversed. In theory, slightly
+more performant than ~t-cons~ since it performs no final reversal.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-pass #'t-snoc '(1 2 3))
+#+end_src
+
+#+RESULTS:
+: (3 2 1)
+
+*** t-vector
+
+Collect a stream of values into a vector.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-pass #'t-vector '(1 2 3))
+#+end_src
+
+#+RESULTS:
+: [1 2 3]
+
+*** t-string
+
+Collect a stream of characters into to a single string.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-map #'upcase) #'t-string "hello")
+#+end_src
+
+#+RESULTS:
+: "HELLO"
+
+*** t-hash-table
+
+Collect a stream of key-value cons pairs into a hash table.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-enumerate #'t-hash-table '("a" "b" "c"))
+#+end_src
+
+#+RESULTS:
+: #s(hash-table size 65 test equal rehash-size 1.5 rehash-threshold 0.8125 data (0 "a" 1 "b" 2 "c"))
+
+*** t-count, t-average, t-median, t-quantities
+
+Count the number of elements that made it through the transduction.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass #'t-count '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: 5
+
+Calculate the average value of all numeric elements in a transduction.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass #'t-average '(1 2 3 4 5 6))
+#+end_src
+
+#+RESULTS:
+: 3.5
+
+Calculate the median value of all elements in a transduction, provided that they
+are numbers, strings, or characters. The elements are sorted once before the
+median is extracted.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass #'t-median '(1 1 1 0 2 4 1 4 9))
+#+end_src
+
+#+RESULTS:
+: 1
+
+Count the occurrences of every item in the transduction.
+Equality is determined via a given TEST predicate function.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass (t-quantities #'eql) '(1 1 2 1 3 4 5 4 3 2 1))
+#+end_src
+
+#+RESULTS:
+: #s(hash-table data (1 4 2 2 3 2 4 2 5 1))
+
+*** t-any?, t-all?
+
+Yield t if any element in the transduction satisfies PRED. Short-circuits the
+transduction as soon as the condition is met.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-pass (t-any? #'cl-evenp) '(1 3 5 7 9 2))
+#+end_src
+
+#+RESULTS:
+: t
+
+Yield t if all elements of the transduction satisfy PRED. Short-circuits with
+NIL if any element fails the test.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-pass (t-all? #'cl-oddp) '(1 3 5 7 9))
+#+end_src
+
+#+RESULTS:
+: t
+
+*** t-partition
+
+Given some predicate function, split the stream and collect its values into two
+lists, those items that passed the check, and those that failed. 
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce #'t-pass (t-partition #'cl-evenp) '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: ((2 4) (1 3 5))
+
+*** t-first, t-last, t-find
+
+Yield the first value of the transduction. As soon as this first value is
+yielded, the entire transduction stops.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce (t-filter #'cl-oddp) #'t-first '(2 4 6 7 10))
+#+end_src
+
+#+RESULTS:
+: 7
+
+Yield the last value of the transduction.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass #'t-last '(2 4 6 7 10))
+#+end_src
+
+#+RESULTS:
+: 10
+
+Find the first element in the transduction that satisfies a given PRED. Yields
+NIL if no such element were found.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass (t-find #'cl-evenp) '(1 3 5 6 9))
+#+end_src
+
+#+RESULTS:
+: 6
+
+*** t-fold
+
+~t-fold~ is the fundamental reducer. ~t-fold~ creates an ad-hoc reducer based on
+a given 2-argument function. An optional SEED value can also be given as the
+initial accumulator value, which also becomes the return value in case there
+were no input left in the transduction.
+
+Functions like ~+~ and ~*~ are automatically valid reducers, because they yield sane
+values even when given 0 or 1 arguments. Other functions like ~max~ cannot be used
+as-is as reducers since they can't be called without arguments. For functions
+like this, ~t-fold~ is appropriate.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass (t-fold #'max) '(1 2 3 4 1000 5 6))
+#+end_src
+
+#+RESULTS:
+: 1000
+
+With a seed:
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass (t-fold #'max 0) '())
+#+end_src
+
+#+RESULTS:
+: 0
+
+In Clojure this function is called =completing=.
+
+*** t-for
+
+Run through every item in a transduction for their side effects. Throws away all
+results and yields a final =t=.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-map #'1+) (t-for (lambda (n) (message "%s" n))) [1 2 3 4])
+#+end_src
+
+#+RESULTS:
+: t
+
+*** t-into-json-buffer
+
+Write a stream of objects into the current buffer as json.
+
+Makes no assumptions about the position of point or current contents of the
+buffer. That is left to the user to manage, as well as the saving of the buffer
+after writing.
+
+#+begin_src emacs-lisp :exports both
+(with-temp-buffer
+  (t-transduce #'t-pass #'t-into-json-buffer '((:name "Colin") (:name "Jack")))
+  (buffer-string))
+#+end_src
+
+#+RESULTS:
+: [{"name":"Colin"},{"name":"Jack"}]
+
+** Sources
+
+Data is pulled in an on-demand fashion from /Sources/. They can be either finite
+or infinite in length. A list is an example of a simple Source, but you can also
+pull from files and endless number generators.
+
+*** t-ints, t-random
+
+Yield all integers, beginning with START and advancing by an optional STEP value
+which can be positive or negative. If you only want a specific range within the
+transduction, then use ~t-take-while~ within your transducer chain.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take 10) #'t-cons (t-ints 0 :step 2))
+#+end_src
+
+#+RESULTS:
+: (0 2 4 6 8 10 12 14 16 18)
+
+Yield an endless stream of random numbers, based on a given LIMIT.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take 20) #'t-cons (t-random 10))
+#+end_src
+
+#+RESULTS:
+: (3 9 9 2 2 3 6 3 7 3 3 6 3 6 0 7 5 4 9 5)
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take 3) #'t-cons (t-random 1.0))
+#+end_src
+
+#+RESULTS:
+: (0.47136199474334717 0.10177326202392578 0.2851991653442383)
+
+*** t-cycle, t-repeat, t-shuffle
+
+Yield the values of a given SEQ endlessly.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take 10) #'t-cons (t-cycle '(1 2 3)))
+#+end_src
+
+#+RESULTS:
+: (1 2 3 1 2 3 1 2 3 1)
+
+Endlessly yield a given ITEM.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take 4) #'t-cons (t-repeat 9))
+#+end_src
+
+#+RESULTS:
+: (9 9 9 9)
+
+Endlessly yield random elements from a given vector.
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take 5) #'t-cons (t-shuffle ["Alice" "Bob" "Dennis"]))
+#+end_src
+
+#+RESULTS:
+: ("Dennis" "Alice" "Alice" "Dennis" "Alice")
+
+Recall also that strings are vectors too:
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-take 15) #'t-string (t-shuffle "Númenor"))
+#+end_src
+
+#+RESULTS:
+: "rúmnmonNroenmnN"
+
+*** t-plist
+
+Yield key-value pairs from a Property List, usually known as a 'plist'. The
+pairs are passed as a cons cell.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce (t-map #'cdr) #'+ (t-plist '(:a 1 :b 2 :c 3)))
+#+end_src
+
+#+RESULTS:
+: 6
+
+See also the ~t-uncons~ transducer for another way to handle incoming cons cells.
+
+*** t-reversed
+
+Yield a vector's elements in reverse order.
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(t-transduce (t-take 2) #'t-cons (t-reversed [1 2 3 4]))
+#+end_src
+
+#+RESULTS:
+: (4 3)
+
+Recall that strings are also vectors.
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(t-transduce #'t-pass #'t-string (t-reversed "Hello"))
+#+end_src
+
+#+RESULTS:
+: "olleH"
+*** t-buffer-read, t-file-read
+
+Given a BUFFER or its name, read its contents line by line.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass #'t-count (t-buffer-read (current-buffer)))
+#+end_src
+
+#+RESULTS:
+: 1248
+
+Given a PATH, read its contents line by line.
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(t-transduce (t-comp (t-filter (lambda (line) (string-prefix-p "[" line)))
+                     (t-map #'nreverse))
+             #'t-vector (t-file-read "/home/colin/.config/git/config"))
+#+end_src
+
+#+RESULTS:
+: ["]resu[" "]timmoc[" "]egrem[" "]buhtig[" "]liamednes[" "]hcnarb["]
+
+*** t-from-json-buffer
+
+Given a BUFFER or its name, read its contents as json. It is assumed that the
+buffer contains a json array, and that it's first non-whitespace character is
+thus a =[=.
+
+The OBJECT-TYPE key accepted by this function is passed as-is to
+=json-parse-buffer=, which is used internally to parse json values. The expected
+value of OBJECT-TYPE is one of =hash-table=, =plist=, or =alist=.
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(with-temp-buffer
+  (insert "[{\"name\": \"Colin\"},{\"name\": \"Jack\"}]")
+  (t-transduce #'t-pass #'t-cons (t-from-json-buffer (current-buffer))))
+#+end_src
+
+#+RESULTS:
+: ((:name "Colin") (:name "Jack"))
+
+** Utilities
+
+*** t-comp, t-const
+
+Function composition. You can pass as many functions as you like and they are
+applied from right to left.
+
+#+begin_src emacs-lisp :exports both
+(funcall (t-comp #'length #'reverse) [1 2 3])
+#+end_src
+
+#+RESULTS:
+: 3
+
+For transducer functions specifically, they are /composed/ from right to left, but
+their effects are /applied/ from left to right. This is due to how the reducer
+function is chained through them all internally via ~t-transduce~.
+
+Notice here how ~t-drop~ is clearly applied first:
+
+#+begin_src emacs-lisp :results verbatim :exports both
+(t-transduce (t-comp (t-drop 3) (t-take 2)) #'t-cons '(1 2 3 4 5 6))
+#+end_src
+
+#+RESULTS:
+: (4 5)
+
+Return a function that ignores its argument and returns ITEM instead.
+
+#+begin_src emacs-lisp :exports both
+(funcall (t-comp (t-const 108) (lambda (n) (* 2 n)) #'1+) 1)
+#+end_src
+
+#+RESULTS:
+: 108
+
+*** t-reduced, t-reduced?, t-reduced-val
+
+When writing your own transducers and reducers, these functions allow you to
+short-circuit the entire operation.
+
+Here is a simplified definition of ~t-first~:
+
+#+begin_src emacs-lisp :exports code
+(defun t-first (&rest vargs)
+  (pcase vargs
+    (`(,_ ,input) (t-reduced input))
+    (`(,acc) acc)
+    (_ nil)))
+#+end_src
+
+You can see ~t-reduced~ being used to wrap the return value. ~t-transduce~ sees this
+wrapping and immediately halts further processing.
+
+~t-reduced?~ and ~t-reduced-val~ can similarly be used (mostly within transducer
+functions) to check if some lower transducer (or the reducer) has signaled a
+short-circuit, and if so potentially perform some clean-up. This is important
+for transducers that carry internal state.
+
+* Example Gallery
+
+** Words in a File
+
+#+begin_src emacs-lisp :exports both
+(t-transduce (t-comp (t-map #'split-string)
+                     #'t-concatenate)
+             #'t-count
+             (t-file-read "README.org"))
+#+end_src
+
+#+RESULTS:
+: 1101
+
+** Splitting a string by its lines
+
+Transducing over a string yields its characters:
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass #'t-count "hello\nworld!")
+#+end_src
+
+#+RESULTS:
+: 12
+
+If you want to transduce over its lines instead, create a temporary buffer
+first:
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(with-temp-buffer
+  (insert "hello\nworld!")
+  (t-transduce #'t-pass #'t-cons (current-buffer)))
+#+end_src
+
+#+RESULTS:
+: ("hello" "world!")
+
+** Reading and Writing CSV data
+
+This library also provides two transducers for processing CSV data: =t-from-csv=
+and =t-into-csv=. The original data can come from any source, like a file, open
+buffer, or raw string.
+
+=t-from-csv= reads the data into a stream of Hash Tables with each value keyed to
+the fields provided in the first line. =t-into-csv= reverses the process, given a
+sequence of headers to select.
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(t-transduce (t-comp #'t-from-csv
+                     (t-into-csv ["Age" "Name"]))
+             #'t-cons
+             ["Name,Age,Hair" "Alice,35,Blond" "Bob,26,Black"])
+#+end_src
+
+#+RESULTS:
+: ("Age,Name" "35,Alice" "26,Bob")
+
+Here we're immediately converting back into CSV strings, but with =t-comp= we're
+free to add as many intermediate steps as we like.
+
+** Reading and Writing JSON data
+
+It is also possible to read from and write to JSON buffers. Reading assumes that
+the buffer contains a top-level array. By default, yielded objects are plists,
+but this can be customized via the ~:object-type~ keyword.
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(with-temp-buffer
+  (insert "[{\"name\": \"Colin\"},{\"name\": \"Jack\"}]")
+  (t-transduce #'t-pass #'t-cons (t-from-json-buffer (current-buffer))))
+#+end_src
+
+#+RESULTS:
+: ((:name "Colin") (:name "Jack"))
+
+Note that ~t-from-json-buffer~ is a "source".
+
+Likewise, ~t-into-json-buffer~ is a reducer that writes a stream of lisp values
+back into the current buffer.
+
+#+begin_src emacs-lisp :exports both
+(with-temp-buffer
+  (t-transduce #'t-pass #'t-into-json-buffer '((:name "Colin") (:name "Jack")))
+  (buffer-string))
+#+end_src
+
+#+RESULTS:
+: [{"name":"Colin"},{"name":"Jack"}]
+
+Note that ~t-into-json-buffer~ makes no assumptions about where point initially is
+the current buffer, nor is the buffer automatically saved. Such concerns are the
+responsibility of the user.
+
+** Reducing into Property Lists and Assocation Lists
+
+There is no special reducer function for plists, because none is needed. If you
+have a stream of cons cells, you can break it up with ~t-uncons~ and then collect
+with ~t-cons~ as usual:
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(t-transduce (t-comp (t-map (lambda (pair) (cons (car pair) (1+ (cdr pair)))))
+                     #'t-uncons)
+             #'t-cons
+             (t-plist '(:a 1 :b 2 :c 3)))
+#+end_src
+
+#+RESULTS:
+: (:a 2 :b 3 :c 4)
+
+Likewise, Association Lists are already lists-of-cons-cells, so no special
+treatment is needed:
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass #'t-cons '((:a . 1) (:b . 2) (:c . 3)))
+#+end_src
+
+#+RESULTS:
+: ((:a . 1) (:b . 2) (:c . 3))
+** Overwriting a Buffer
+
+It's possible to overwrite the contents of a buffer in-place as it's being read.
+Something like this would suffice:
+
+#+begin_src emacs-lisp
+(let ((buffer (find-file-noselect "foo.org")))
+  (t-transduce (t-comp (t-map (lambda (line) (upcase line)))
+                       (t-map (lambda (line)
+                                (unless (string-empty-p line)
+                                  (kill-line)
+                                  (insert line)))))
+               #'t-for-each buffer)
+  (with-current-buffer buffer
+    (save-buffer)))
+#+end_src
+
+However, since =with-current-buffer= is also called internally within the
+=t-transduce= implementation for buffers, care must be taken that you don't
+(overly) interfere with the position of =point=!
+
+For example, a call to =(t-map (lambda (line) (goto-char (point-min))))= would
+result in an endless loop, as the logic internal to =transduce= is simply trying
+to jump to the next line one at a time.
+
+* Writing your own Primitives
+
+One of the advantages of the Transducers pattern is that there is no "magic".
+As you'll see below, it's all just function composition.
+
+** Transducers
+
+A Transducer is a function that _continues the stream_. It operates on one
+element at a time. It receives input, optionally does something to it, and then
+optionally continues by calling the next function in the chain, or it ignores
+the current input, or it short-circuits the stream entirely. We'll see examples
+of all of these below.
+
+*** t-map - A simple transformation
+
+Here is how =map= is implemented in the library. Let's study it to learn the
+overall structure of transducers in general.
+
+#+begin_src lisp
+(defun t-map (f)  ;; (1) Top-level arguments needed throughout.
+  (lambda (reducer)    ;; (2) The rest of the composed function chain.
+    (lambda (result &rest inputs)  ;; (3) The main body of the transducer.
+      (if inputs
+          (funcall reducer result (apply f inputs))  ;; (4) The primary logic and a call to the next stage.
+          (funcall reducer result)))))  ;; (5) The finalisation pass.
+#+end_src
+
+Recall that =map= would be called like:
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(t-transduce (t-map #'1+) #'t-cons '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: (2 3 4 5 6)
+
+So we can see at (1) that the =f= corresponds to the function we're passing in,
+which we expect to be applied to all elements of the stream.
+
+(2) might be a surprise. What is =reducer= and where does it come from? Is it the
+=cons= call seen above? Well, it's actually the transducer chain (possibly
+combined via =comp=), followed by the reducer. Like this:
+
+[[file:transducers.png]]
+
+It is the call to =transduce= that puts this all together for you.
+
+(3) is what actually gets called during the iteration. Unlike Clojure and Scheme
+which can pattern match on the number of arguments directly, or Common Lisp
+which at least can use special syntax with =&optional=, Emacs Lisp has no way to
+cleverly detect how many arguments it was passed. So instead we accept them all
+as a =&rest=. If the =inputs= list is empty, we know the Transduction is over.
+
+(4) should be clear; apply =f= and then call the =reducer= the continue the chain.
+
+(5) will become clearer once we've learned about the structure of Reducers. For
+now, just know that this is the last thing that the top-level =t-transduce= call
+attempts as it is finalising the result.
+
+*** t-filter - Ignoring input
+
+With =t-map= fresh in your mind, now stare at this:
+
+#+begin_src emacs-lisp
+(defun t-filter (pred)
+  (lambda (reducer)
+    (lambda (result &rest inputs)
+      (if inputs
+          ;; vvv (4) vvv
+          (if (apply pred inputs)
+              (apply reducer result inputs)
+            result)
+        ;; ^^^ (4) ^^^
+        (funcall reducer result)))))
+#+end_src
+
+Point (4) in the previous example was the "meat", the actual logic of the
+transducer. Here we see it expanded a bit. Notice that we only continue the
+chain at (4a) if the predicate passed. Otherwise, we _yield the result we were
+given_ and directly return, going no further for this particular input element.
+Then, =t-transduce= will supply the next one. The effect is what we'd expect of
+=t-filter=; some elements make it through the stream and some don't.
+
+*** t-take-while - Short-circuiting
+
+Similar to =t-filter= is =t-take-while=, except that the latter halts the stream
+entirely as soon as an element fails the predicate.
+
+#+begin_src emacs-lisp
+(defun t-take-while (pred)
+  (lambda (reducer)
+    (lambda (result &rest inputs)
+      (if inputs
+          ;; vvv (4) vvv
+          (if (not (apply pred inputs))
+              (t-reduced result)
+            (apply reducer result inputs))
+          ;; ^^^ (4) ^^^
+        (funcall reducer result)))))
+#+end_src
+
+Here =t-reduced= makes its debut. This wraps the given value in a special type
+that signals to =t-transduce= that the transduction has been short-circuited and
+must end. Nothing further will be pulled from the Source.
+
+*** t-unique - Stateful transduction
+
+Despite just being a group of composed functions, individual transducers can
+hold state. Consider =t-unique=, which is called like:
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(t-transduce #'t-unique #'t-cons '(1 2 1 3 2 1 2 "abc"))
+#+end_src
+
+#+RESULTS:
+: (1 2 3 "abc")
+
+Here's its definition:
+
+#+begin_src emacs-lisp
+(defun t-unique (reducer)
+  (let ((seen (make-hash-table :test #'equal)))
+    (lambda (result &rest inputs)
+      (if inputs
+          ;; vvv (4) vvv
+          (if (gethash (car inputs) seen)
+              result
+            (progn (puthash (car inputs) t seen)
+                   (funcall reducer result (car inputs))))
+          ;; ^^^ (4) ^^^
+        (funcall reducer result)))))
+#+end_src
+
+There are two immediate differences here:
+
+1. Since =t-unique= requires no top-level argument (like =t-map= or =t-filter=), it is
+   passed directly to =t-transduce= as =#'t-unique=. This means we don't need
+   another inner =lambda= and can accept the =reducer= directly.
+2. We can open a =let= before Point (3), and the =seen= Hash Table is then captured
+   by the =lambda=. This has the effect of persisting it between every call of the
+   =lambda= on each element.
+
+Once again we notice a bare =result= being returned if we've seen the current
+element already.
+
+** Reducers
+
+A Reducer is a function that _consumes a stream_. It accepts two, one, or no
+arguments.
+
+*** t-count - Simple cumulative state
+
+An example of =t-count= being called:
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass #'t-count '(1 2 3 4 5))
+#+end_src
+
+#+RESULTS:
+: 5
+
+Here is its definition:
+
+#+begin_src lisp
+(defun t-count (&rest vargs)
+  (pcase vargs
+    (`(,acc ,_) (1+ acc))  ;; (I) Iterative case. The stream is still running.
+    (`(,acc) acc)  ;; (D) We're done! Do any post-processing here.
+    (`() 0)))  ;; (M) "Monoidal" / base case.
+#+end_src
+
+Similar to the Transducer functions, we use the =&rest= trick and then pattern
+match via =pcase= to test how many arguments we were given.
+
+Let's start from the bottom with the (M) base case. =t-transduce= calls this
+internally in order to generate an initial value. This corresponds to the =result=
+seen in the Transducer examples. Since each Reducer behaves differently and we
+are not using a static type system, we must define the Reducer's unique "zero
+value" here.
+
+(D) is what was hinted at before - this case is called last by =transduce= in
+order to allow the Reducer to do any post-processing before the final value is
+yielded to the user. This is necessary as occasionally the =acc= value grown by
+the Reducer can be a complicated structure and we may want to sort it, unwrap
+it, etc.
+
+(I) is the usual case and corresponds to some Transducer calling down into the
+Reducer with the cumulative state thusfar and the current stream element. The
+Reducer then decides what to do with them. In the case of =t-count=, the element
+itself is ignored and we just add 1 to our growing =acc=.
+
+*** t-cons - Some post-processing
+
+#+begin_src emacs-lisp
+(defun t-cons (&rest vargs)
+  (pcase vargs
+    (`(,acc ,input) (cons input acc))  ;; (I)
+    (`(,acc) (reverse acc))  ;; (D)
+    (`() '())))  ;; (M)
+
+#+end_src
+
+Here in (I) we see the =input= actually being saved. This then loops back around
+within =t-transduce=, which pulls the next value from the Source and calls the
+Transducer chain again.
+
+In (D) we see some realistic post-processing. Since (I) was naively consing, the
+order of our elements is backwards from what we intend. Thus they must be
+reversed once before being yielded to the user.
+
+In (M) our "zero value" is the empty list. Otherwise, what would we be consing
+onto on the first pass of (I)?
+
+*** t-any? - Short-circuiting
+
+=t-anyp= stops as soon as anything satisfies its predicate.
+
+#+begin_src emacs-lisp :exports both
+(t-transduce #'t-pass (t-anyp #'cl-evenp) '(1 3 5 2 7 9))
+#+end_src
+
+#+RESULTS:
+: t
+
+Usage of =t-reduced= isn't limited to Transducers; Reducers can short-circuit the
+stream as well.
+
+#+begin_src lisp
+(defun t-any? (pred)
+  (lambda (&rest vargs)
+    (pcase vargs
+           (`(,_ ,input)
+             ;; vvv (I) vvv
+             (if (funcall pred input)
+                 (t-reduced t)
+                 nil))
+             ;; ^^^ (I) ^^^
+           (`(,acc) acc)
+           (_ nil))))
+#+end_src
+
+Like with =t-filter=, this Reducer requires a top-level predicate, so we add an
+inner =lambda=.
+
+Within (I) we can see =t-reduced= employed. Seeing this, =t-transduce= will not
+continue and will instead go right to the (D) case. The final =acc= is =T=.
+
+** Sources
+
+=t-transduce= is a =cl-defgeneric=, and so can be called on anything that has a
+corresponding =cl-defmethod= for it. There are many "natural" Sources like lists
+and vectors, but we can easily define our own and then supply a =transduce= method
+to add it to the family of things we can iterate over.
+
+Let's review the =t-reversed= Source, a means by which to iterate over a vector in
+reverse order.
+
+#+begin_src emacs-lisp :exports both :results verbatim
+(t-transduce #'t-pass #'t-string (t-reversed "Hello"))
+#+end_src
+
+#+RESULTS:
+: "olleH"
+
+In order to have a distinct type to associate a =t-transduce= method with, we need
+a wrapper type:
+
+#+begin_src emacs-lisp
+(cl-defstruct t-reversed
+  "A wrapper around an array/vector/string type."
+  (array nil :type array))
+#+end_src
+
+We also supply a prettier constructor:
+
+#+begin_src emacs-lisp
+(defun t-reversed (array)
+  "Source: Yield an ARRAY's elements in reverse order."
+  (make-transducers-reversed :array array))
+#+end_src
+
+Now come a trio of functions that drive the iteration:
+
+#+begin_src emacs-lisp
+(cl-defmethod t-transduce (xform f (source t-reversed))
+  (t--reversed-transduce xform f source))
+
+(defun t--reversed-transduce (xform f coll)
+  (let* ((init   (funcall f))  ;; (1) The (M) case of the Reducer.
+         (xf     (funcall xform f))  ;; (2) Putting the transducer/reducer chain together.
+         (result (t--reversed-reduce xf init coll)))  ;; (3) The work.
+    (funcall xf result)))  ;; (7) The (D) case of the Reducer.
+
+(defun t--reversed-reduce (f identity rev)
+  (let* ((arr (t-reversed-array rev))
+         (len (length arr)))
+    ;; Simple recursion to drive the iteration.
+    (cl-labels ((recurse (acc i)
+                  (if (< i 0)
+                      acc  ;; (4) We're done.
+                    (let ((acc (funcall f acc (aref arr i))))
+                      (if (t-reduced-p acc)  ;; (5a) Short-circuiting occured. Time to go home.
+                          (t-reduced-val acc)
+                        (recurse acc (1- i)))))))  ;; (5b) Otherwise, keep going.
+      (recurse identity (1- len)))))
+#+end_src
+
+All types follow this pattern. In (1) and (2) we do initial setup. In (4) we've
+reached the natural end of the Source (e.g. the end of the vector).
+
+At (5a) we see that we always need to check if the result of the current call
+was "reduced", i.e. short-circuited.
+
+That's it! The beauty of =cl-defgeneric= is that its methods can be defined in other
+packages, meaning you're free extend this library in your own code.
+
+* Resources
+
+- [[https://clojure.org/reference/transducers][Clojure: Transducers]]
+- [[https://clojure.org/guides/faq#transducers_vs_seqs][Clojure: What are good uses cases for transducers?]]
+- [[https://www.youtube.com/watch?v=4KqUvG8HPYo][Youtube: Inside Transducers]] (Rich Hickey)
+
+# Local Variables:
+# read-symbol-shorthands: (("t-" . "transducers-"))
+# End:

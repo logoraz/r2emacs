@@ -1,4 +1,4 @@
-#+title: emacs-config: A Modular Emacs Configuration
+#+title: r2Emacs: A Modular Emacs Configuration
 #+author: logoraz
 #+date: 2025-12-25
 #+options: toc:nil
@@ -18,8 +18,3 @@
 
 My personal "lightweight" modular Emacs configuration.
 
-
-** References:
-
-  - TBD
-  - TBD
