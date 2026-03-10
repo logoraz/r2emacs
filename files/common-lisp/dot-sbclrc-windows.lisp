@@ -70,3 +70,19 @@
 ;;;
 ;;; Other
 
+;;; Need to first create the following symlinks (in Msys2/ucrt64)
+;;; ln -s lisqlite3-0.dll libsqlite3.dll
+;;; ln -s sqlite3-0.dll sqlite3.dd
+(require :cffi)
+
+(let ((lib-dir (merge-pathnames "Programs/msys2/ucrt64/bin"
+                                (uiop:xdg-data-home))))
+  ;; Ensure PATH includes ucrt64/bin
+  (setf (uiop:getenv "PATH")
+        (concatenate 'string
+                     (namestring lib-dir)
+                     ";" (uiop:getenv "PATH")))
+  ;; Register with CFFI
+  (pushnew lib-dir
+           cffi:*foreign-library-directories*
+           :test #'equal))

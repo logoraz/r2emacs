@@ -1,0 +1,15 @@
+# Root
+/elpa*
+
+
+## Extensions
+/syntax/*.elc
+
+## Contrib
+/contrib/*/*.elc
+
+## Modules
+
+
+## Files
+/files/nixos*
