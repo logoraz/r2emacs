@@ -111,7 +111,9 @@
   :diminish
   ;; better than using flycheck-global-modes as it defers loading
   ;; optimizing Emacs startup!!
-  :hook ((emacs-lisp-mode lisp-mode scheme-mode) . flycheck-mode)
+  ;; flycheck freezes emacs when enabled in lisp-mode and using reader
+  ;; macros (e.g. #+nil)
+  :hook ((emacs-lisp-mode) . flycheck-mode)
   :custom
   (flycheck-checker-error-threshold 2000 "Increase error threshold."))
 
@@ -213,7 +215,7 @@
   ;; Enable sly IDE for Common Lisp
   :hook ((lisp-mode . sly-editing-mode)
          (lisp-mode . r2/sly-auto-connect)
-         (sly-mode  . r2/sly-completions)
+         ;; (sly-mode  . r2/sly-completions)
          (sly-mrepl-mode  . r2/register-mrepl-frame))
   :custom
   (sly-default-lisp 'sbcl
@@ -255,8 +257,6 @@
     (beframe-assume-buffers-matching-regexp-all-frames "\\*sly-mrepl"))
 
   ;; Sly completions
-  (setq sly-symbol-completion-mode nil)
-
   (defun r2/sly-completions ()
     "Set flex to completion styles."
     (setq-local completion-styles '(sly--external-completion basic flex))
