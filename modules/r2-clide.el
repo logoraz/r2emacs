@@ -213,7 +213,7 @@
   ;; Enable sly IDE for Common Lisp
   :hook ((lisp-mode . sly-editing-mode)
          (lisp-mode . r2/sly-auto-connect)
-         (sly-mode  . r2/sly-completions)
+         ;; (sly-mode  . r2/sly-completions)
          (sly-mrepl-mode  . r2/register-mrepl-frame))
   :custom
   (sly-default-lisp 'sbcl
