@@ -66,18 +66,18 @@
      (sequence "ACTIVE(a@/!)" "|" "CANCELED(c@/!)" "ARCHIVED(r@/!)")))
   ;; view color options via `M-x' `list-colors-display'
   (org-todo-keyword-faces
-   '(("TODO" . "#fff68f")               ; khaki1
-     ("NEXT" . "#00bfff")               ; DeepSkyBlue
-     ("GOTO" . "#d08770")               ; Aurora orange
-     ("REST" . "#88c0d0")               ; Frost teal
+   '(("TODO" . "#ebcb8b")               ; Aurora yellow
+     ("NEXT" . "#d08770")               ; DeepSkyBlue
+     ("GOTO" . "#ab82ff")               ; Aurora orange
+     ("REST" . "#4c566a")               ; Polar Night Light Gray
      ("WAIT" . "#ff69b4")               ; HotPink
-     ("HOLD" . "#ff6347")               ; tomato
-     ("DONE" . "#3cb371")               ; MediumSeaGreen
-     ("ZONE" . "#8fbcbb")               ; Frost green
-     ("ACTIVE"    . "#7fffd4")          ; aquamarine
+     ("HOLD" . "#bf616a")               ; Aurora Red
+     ("DONE" . "#88c0d0")               ; Frost teal
+     ("ZONE" . "#81a1c1")               ; Frost gray-blue
+     ("ACTIVE"    . "#5e81ac")          ; Frost blue
      ("COMPLETE"  . "#a3be8c")          ; Aurora green
-     ("CANCELED"  . "#81a1c1")          ; Frost blue
-     ("ARCHIVED"  . "#ab82ff")))        ; MediumPurple1
+     ("CANCELED"  . "#4c566a")          ; Polar Night Light Gray
+     ("ARCHIVED"  . "#434c5e")))        ; Polar Night Med. Gray
   (org-babel-lisp-eval-fn 'sly-eval
                           "Configure Babel Programming Language Execution")
   (org-agenda-files
