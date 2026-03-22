@@ -12,7 +12,27 @@
 
 (use-package dired
   :ensure nil
-  :defer t)
+  :defer t
+  :bind (:map dired-mode-map
+              ("o" . r2/dired-find-file-other-window))
+  :config
+  (defun r2/dired-find-file-other-window ()
+    (interactive)
+    (let* ((file (dired-get-file-for-visit))
+           (current (selected-window))
+           (others (seq-filter (lambda (w) (not (eq w current)))
+                               (window-list)))
+           (tallest (seq-reduce (lambda (a b)
+                                  (if (> (window-height b) (window-height a)) b a))
+                                (cdr others) (car others)))
+           (max-height (window-height tallest))
+           (tallest-windows (seq-filter (lambda (w) (= (window-height w) max-height))
+                                        others))
+           (target (if (= (length tallest-windows) 1)
+                       tallest
+                     (next-window current 'no-minibuf))))
+      (select-window target)
+      (find-file file))))
 
 (use-package dired-x
   :ensure nil
