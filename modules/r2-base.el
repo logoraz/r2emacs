@@ -273,11 +273,27 @@
   ;; Corrects (and improves) org-mode's native fontification.
   (doom-themes-org-config))
 
+(use-package dashboard
+  :ensure t
+  :config
+  (setq dashboard-icon-type 'nerd-icons
+        dashboard-set-heading-icons t
+        dashboard-set-file-icons t
+        dashboard-center-content t
+        dashboard-image-banner-max-height 200
+        dashboard-startup-banner (expand-file-name "assets/cl-logoraz.svg"
+                                                   r2-xdg-config-home)
+        dashboard-projects-backend 'project-el
+        dashboard-items '((recents  . 5)
+                          (bookmarks . 5)
+                          (projects  . 5))
+        initial-buffer-choice (lambda () (get-buffer "*dashboard*")))
+  (dashboard-setup-startup-hook))
 
 
 ;;; Tabs (optional)
 (use-package tab-bar
-  :disabled ; Not currently using tab-bar
+  :disabled                             ; Not currently using tab-bar
   :ensure t
   :custom
   (tab-bar-show 1))
@@ -340,7 +356,7 @@
   :custom
   (beframe-global-buffers
    '("*scratch*" "*Messages*" "*Completions*" "*Backtrace*" "*info*"
-     "*Buffer List*" "*Async-native-compile-log*"))
+     "*Buffer List*" "*Async-native-compile-log*" "*dashboard*"))
   :init (beframe-mode 1)
   :config
   (setq beframe-create-frame-scratch-buffer nil)
