@@ -290,6 +290,7 @@
 (defun r2/general-win-layout ()
   "Scaffold preferred general window layout."
   (interactive)
+  (switch-to-buffer "*scratch*")
   (split-window-horizontally)
   (other-window 1)
   (split-window-vertically))
@@ -309,7 +310,7 @@
 ;; Instead of a stack, I can take the functional programming approach as saving
 ;; the layout as a closure --> see my functional calculator gcal for reference.
 (defvar r2--current-window-layout nil
-  "Persistant variable holding window layout")
+  "Persistant variable holding window layout.")
 
 (defun r2/save-current-windows ()
   "Save current window layout"
