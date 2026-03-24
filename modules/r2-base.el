@@ -122,15 +122,8 @@
   (project-list-file
    (expand-file-name "projects" r2-var-directory)
    "Handled by no-littering, but here for a safeguard.")
-  :preface
-  (defun r2/project-ignore-elpa-advice (root &optional _no-write)
-    "Prevent ELPA directories from being remembered as projects."
-    (string-prefix-p (expand-file-name "elpa" r2-xdg-cache-home)
-                     (expand-file-name root)))
   :config
-  (setq project-vc-ignores '("*.elc" "*.eln"))
-  (advice-add 'project--remember-dir :before-until
-              #'r2/project-ignore-elpa-advice))
+  (setq project-vc-ignores '("*.elc" "*.eln")))
 
 
 ;;; External Modules
