@@ -32,7 +32,7 @@
 
 (use-package display-line-numbers
   :ensure nil
-  :hook ((scheme-mode lisp-mode emacs-lisp-mode)
+  :hook ((scheme-mode lisp-mode emacs-lisp-mode nix-mode)
          . display-line-numbers-mode))
 
 (use-package display-fill-column-indicator
