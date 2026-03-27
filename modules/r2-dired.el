@@ -14,7 +14,7 @@
   :ensure nil
   :defer t
   :bind (:map dired-mode-map
-              ("o" . r2/dired-find-file-other-window))
+              ("r" . r2/dired-find-file-other-window))
   :config
   (defun r2/dired-find-file-other-window ()
     (interactive)

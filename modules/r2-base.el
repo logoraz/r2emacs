@@ -1,11 +1,12 @@
 ;;; r2-base.el --- Base Config/Defaults -*- lexical-binding: t -*-
 
 ;;; Commentary:
+;;;
 ;;; Configuration of Emacs Core libraries.
+;;;
 ;;; Default "Essential" Settings & Packages I use daily...
 ;;; See `comp.el' for review of Andrea Corallo's legendary world on native
 ;;; compilation (aka `eln' files).
-;;; Research difference between emacs-next-tree-sitter & emacs-next-pgtk
 ;;; See https://www.emacswiki.org/emacs/PageBreaks
 ;;;  ‘forward-page’ (`C-x ]’ or `C-]’),
 ;;;  ‘backward-page’ (`C-x [’ or `C-[’), and `narrow-to-page' (‘C-x n p’).
@@ -17,6 +18,8 @@
 
 ;;; File Settings: Auto Save, Backups, History, Bookmark, Recent Files,
 ;;; & Minibuffer control
+
+;;; Helpers/Utilities
 
 ;;; Open files with sudo
 (defun r2/sudo-edit-current-file ()
@@ -33,6 +36,47 @@
 ;; see - `auto-save-list-file-name'
 (setq auto-save-list-file-prefix (expand-file-name "auto-save/.saves-"
                                                    r2-var-directory))
+
+;;; Minibuffer acrobatics
+(defun r2/switch-to-minibuffer ()
+  "Switch to minibuffer window."
+  (interactive)
+  (if (active-minibuffer-window)
+      (select-window (active-minibuffer-window))
+    (error "Minibuffer is not active")))
+
+(bind-key "C-c o" 'r2/switch-to-minibuffer)
+
+(defun r2/clear-history ()
+  "Clear recent files, project list, and minibuffer history.
+Resets `recentf-list', `project--list', and common history variables,
+then persists the cleared state to disk."
+  (interactive)
+  (when (yes-or-no-p "Clear all recent files, projects, and minibuffer history? ")
+    ;; Recent files
+    (setq recentf-list nil)
+    (recentf-save-list)
+    ;; Project list
+    (setq project--list nil)
+    (project--write-project-list)
+    ;; Minibuffer & search histories
+    (dolist (var '(minibuffer-history
+                   extended-command-history
+                   command-history
+                   file-name-history
+                   search-ring
+                   regexp-search-ring
+                   kill-ring))
+      (when (boundp var)
+        (set var nil)))
+    ;; Persist savehist if loaded
+    (when (bound-and-true-p savehist-mode)
+      (savehist-save))
+    ;; Refresh dashboard if open
+    (when (get-buffer "*dashboard*")
+      (dashboard-refresh-buffer))
+    (message "r2: history cleared.")))
+
 ;; Backups
 (setq  backup-directory-alist
        `(("." . ,(expand-file-name "backup" r2-var-directory)))
@@ -79,15 +123,18 @@
   (r2/ignore-messages
     (recentf-mode)))
 
-;;; Minibuffer acrobatics
-(defun r2/switch-to-minibuffer ()
-  "Switch to minibuffer window."
-  (interactive)
-  (if (active-minibuffer-window)
-      (select-window (active-minibuffer-window))
-    (error "Minibuffer is not active")))
-
-(bind-key "C-c o" 'r2/switch-to-minibuffer)
+;;; Projects
+;; C-x p f — find file in project
+;; C-x p p — switch project
+(use-package project
+  :ensure nil
+  :custom
+  (project-vc-ignores '("*.ecl" "*.eln"))
+  ;; (project-list-file
+  ;;  (expand-file-name "projects" r2-var-directory)
+  ;;  "Handled by no-littering, but here for a safeguard.")
+  :config
+  (setq project-vc-ignores '("*.elc" "*.eln")))
 
 ;;; Info Files (Xtra)
 (use-package info
@@ -116,14 +163,6 @@
       (server-start))
     (message "Emacs Server started!!")))
 
-(use-package project
-  :ensure nil
-  :custom
-  (project-list-file
-   (expand-file-name "projects" r2-var-directory)
-   "Handled by no-littering, but here for a safeguard.")
-  :config
-  (setq project-vc-ignores '("*.elc" "*.eln")))
 
 
 ;;; External Modules
@@ -287,9 +326,9 @@
         dashboard-startup-banner (expand-file-name "assets/cl-logoraz.svg"
                                                    r2-xdg-config-home)
         dashboard-projects-backend 'project-el
-        dashboard-items '((recents  . 5)
+        dashboard-items '((projects  . 5)
                           (bookmarks . 5)
-                          (projects  . 5))
+                          (recents   . 7))
         initial-buffer-choice (lambda () (get-buffer "*dashboard*")))
   (dashboard-setup-startup-hook))
 
@@ -353,29 +392,36 @@
   :defer t
   :diminish beframe-mode
   :bind (("C-c b"   . beframe-transient)
-         ("C-c f o" . make-frame-command)
+         ("C-c f o" . r2/make-new-frame)
          ("C-c f e" . delete-frame))
   :hook ((Buffer-menu-mode . r2/buffer-menu-colorize))
   :custom
   (beframe-global-buffers
    '("*scratch*" "*Messages*" "*Completions*" "*Backtrace*" "*info*"
-     "*Buffer List*" "*Async-native-compile-log*" "*dashboard*"))
+     "*Buffer List*" "*Bookmark List*" "*Async-native-compile-log*"
+     "*dashboard*"))
+  (beframe-create-frame-scratch-buffer ())
   :init (beframe-mode 1)
   :config
-  (setq beframe-create-frame-scratch-buffer nil)
-
   (add-to-list 'display-buffer-alist
                '("*Buffer List*" . (display-buffer-same-window)))
 
-(defvar r2--beframe-colors
+  (defvar r2--beframe-colors
     '("#5e81ac" "#81a1c1" "#88c0d0" "#8fbcbb")
     "List of colors for different beframes.")
 
-(defvar r2--global-buffer-color "#b48ead"
-  "Color for global buffers in buffer menu.")
+  (defvar r2--global-buffer-color "#b48ead"
+    "Color for global buffers in buffer menu.")
 
-(defvar r2--unassociated-buffer-color "#4c566a"
-  "Color for buffers not associated with any frame.")
+  (defvar r2--unassociated-buffer-color "#4c566a"
+    "Color for buffers not associated with any frame.")
+
+  (defun r2/make-new-frame ()
+  "Make new frame, opening fresh with dashboard only."
+  (interactive)
+  (save-window-excursion
+    (switch-to-buffer "*dashboard*")
+    (make-frame-command)))
 
   (defun r2/beframe-buffer-color (buffer)
     "Return color for BUFFER based on its beframe association.

@@ -109,11 +109,10 @@
 (use-package flycheck
   :ensure t
   :diminish
-  ;; better than using flycheck-global-modes as it defers loading
-  ;; optimizing Emacs startup!!
   ;; flycheck freezes emacs when enabled in lisp-mode and using reader
-  ;; macros (e.g. #+nil)
-  :hook ((emacs-lisp-mode) . flycheck-mode)
+  ;; macros (e.g. #+nil) as well as freezes when used alongside corfu
+  ;; in general - disabling any sort of auto-enabling for now...
+  ;; :hook ((emacs-lisp-mode) . flycheck-mode)
   :custom
   (flycheck-checker-error-threshold 2000 "Increase error threshold."))
 
