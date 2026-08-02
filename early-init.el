@@ -39,6 +39,8 @@
   "Emacs Contrib directory.")
 
 ;; Add language syntax expression to load path and use
+(add-to-list 'load-path (expand-file-name "transducers.el"
+                                          r2-contrib-directory))
 (add-to-list 'load-path r2-syntax-directory)
 
 ;;; End Bootstrap
@@ -157,8 +159,6 @@
 ;; See Window Frame parameters
 ;; https://www.gnu.org/software/emacs/manual/html_node/elisp/
 ;; Window-Frame-Parameters.html
-(set-frame-name "Home")
-
 ;; Customize Frame Title Construct
 (setq-default frame-title-format
               '(multiple-frames
@@ -215,9 +215,10 @@
                (frame-parameter frame 'fullscreen))
      (set-frame-size frame 140 40)
      (set-frame-position frame 0 0)))
+
+  :if (eq system-type 'gnu/linux)
   :args (frame)
-  :hook window-size-change-functions
-  :disable? (eq system-type 'windows-nt))
+  :hook window-size-change-functions)
 
 ;; Prevent white flash on startup
 ;; https://github.com/protesilaos/dotfiles/blob/master/emacs/.emacs.d/
@@ -257,7 +258,7 @@
      (toggle-frame-maximized))
    (setf (alist-get 'alpha default-frame-alist) '(95 . 90)))
 
-  :disable? (eq system-type 'gnu/linux)
+  :if (eq system-type 'windows-nt)
   :args (frame)
   :hook (after-make-frame-functions)
   :depth 91)

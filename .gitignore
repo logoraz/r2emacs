@@ -5,11 +5,12 @@
 ## Extensions
 /syntax/*.elc
 
-## Contrib
-/contrib/*/*.elc
+## Contrib — vendored 3rd-party libraries kept as live git checkouts.
+## We track the directory exists (via .gitkeep) but ignore the checkout
+## contents entirely — each subdirectory is independently cloned and updated.
+/contrib/*
+!/contrib/.gitkeep
+
 
 ## Modules
 
-
-## Files
-/files/nixos*

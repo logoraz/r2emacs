@@ -29,7 +29,7 @@
     (user-error "Current buffer is not visiting a file"))
   (find-alternate-file (concat "/sudo::" buffer-file-name)))
 
-(unless (eq system-type 'gnu/linix)
+(unless (eq system-type 'gnu/linux)
   (global-set-key (kbd "C-c s") #'r2/sudo-edit-current-file))
 
 ;;; Auto Save: Prefix for generating auto-save-list-file-name
@@ -77,7 +77,7 @@ then persists the cleared state to disk."
       (dashboard-refresh-buffer))
     (message "r2: history cleared.")))
 
-;; Backups
+;;; Backups
 (setq  backup-directory-alist
        `(("." . ,(expand-file-name "backup" r2-var-directory)))
        make-backup-files t
@@ -88,6 +88,21 @@ then persists the cleared state to disk."
        kept-old-versions 6
        kept-new-versions 9
        delete-by-moving-to-trash t)
+
+;;; Hacks
+;; Workaround for Emacs 32 native Windows mark activation issue:
+;; keyboard-set mark does not visibly activate region until mouse interaction.
+(when (eq system-type 'windows-nt)
+  (defun r2/hack--force-activate-mark-after-set-mark (&rest _)
+    "Force mark activation after `set-mark-command'."
+    (setq deactivate-mark nil)
+    (activate-mark))
+
+  (advice-add 'set-mark-command :after
+              #'r2/hack--force-activate-mark-after-set-mark))
+;; For removal
+;; (advice-remove 'set-mark-command
+;;                #'r2/hack--force-activate-mark-after-set-mark)
 
 ;;; History
 (use-package savehist
@@ -102,7 +117,7 @@ then persists the cleared state to disk."
         history-delete-duplicates t)
   (savehist-mode 1))
 
-;; Bookmarks
+;;; Bookmarks
 (use-package bookmark
   :ensure nil
   :defer t
@@ -129,14 +144,9 @@ then persists the cleared state to disk."
 (use-package project
   :ensure nil
   :custom
-  (project-vc-ignores '("*.ecl" "*.eln"))
-  ;; (project-list-file
-  ;;  (expand-file-name "projects" r2-var-directory)
-  ;;  "Handled by no-littering, but here for a safeguard.")
-  :config
-  (setq project-vc-ignores '("*.elc" "*.eln")))
+  (project-vc-ignores '("*.ecl" "*.eln")))
 
-;;; Info Files (Xtra)
+;;; Info Files
 (use-package info
   :ensure nil
   :defer t
@@ -145,7 +155,21 @@ then persists the cleared state to disk."
   :config
   (add-to-list 'Info-directory-list
                (expand-file-name "info" user-emacs-directory))
-  (setopt Info-default-directory-list Info-directory-list))
+  ;; Pick up info files shipped inside elpa packages.
+  ;; Needed on Windows where install-info doesn't run post-install,
+  ;; so the per-package dir files never get built.
+  (when (eq system-type 'windows-nt)
+    (let ((elpa-dir (expand-file-name "elpa" user-emacs-directory)))
+      (when (file-directory-p elpa-dir)
+        (dolist (pkg-dir (directory-files elpa-dir t "\\`[^.]"))
+          (when (file-directory-p pkg-dir)
+            ;; Case 1: elpa/package-x.y.z/ contains *.info directly
+            (when (directory-files pkg-dir nil "\\.info\\'" t)
+              (add-to-list 'Info-directory-list pkg-dir))
+            ;; Case 2: elpa/package-x.y.z/info/ subdirectory
+            (let ((info-subdir (expand-file-name "info" pkg-dir)))
+              (when (file-directory-p info-subdir)
+                (add-to-list 'Info-directory-list info-subdir)))))))))
 
 ;;; Enable Emacs server
 (use-package server
@@ -188,7 +212,7 @@ then persists the cleared state to disk."
   (defvar font-height
     (let ((height
            (pcase system-type
-             ('windows-nt 90)
+             ('windows-nt 80)
              ('gnu/linux  100)
              (_           110))))
       height)
@@ -296,14 +320,13 @@ then persists the cleared state to disk."
   ;; (load-theme 'doom-one :no-confirm)
   (load-theme 'doom-tomorrow-night :no-confirm)
 
-  (defun r2/apply-theme (frame)
+  (r2->defhook r2/apply-theme
     "Apply my preferred theme to a new frame."
-    (select-frame frame)
-    (load-theme 'doom-tomorrow-night :no-confirm))
-
-  ;; Needed to apply theme to new frames (and for emacs clients)
-  (add-hook 'after-make-frame-functions
-            'r2/apply-theme)
+    (;; function body
+     (with-selected-frame frame
+       (load-theme 'doom-tomorrow-night :no-confirm)))
+    :args frame
+    :hook after-make-frame-functions)
 
   ;; Enable custom neotree theme (nerd-icons must be installed!)
   (doom-themes-neotree-config)
@@ -323,12 +346,12 @@ then persists the cleared state to disk."
         dashboard-set-file-icons t
         dashboard-center-content t
         dashboard-image-banner-max-height 200
-        dashboard-startup-banner (expand-file-name "assets/cl-logoraz.svg"
+        dashboard-startup-banner (expand-file-name "assets/emacs-logo.png"
                                                    r2-xdg-config-home)
         dashboard-projects-backend 'project-el
-        dashboard-items '((projects  . 5)
-                          (bookmarks . 5)
-                          (recents   . 7))
+        dashboard-items '((projects  . 7)
+                          (bookmarks . 7)
+                          (recents   . 12))
         initial-buffer-choice (lambda () (get-buffer "*dashboard*")))
   (dashboard-setup-startup-hook))
 
@@ -361,26 +384,129 @@ then persists the cleared state to disk."
   (split-window-horizontally))
 
 ;; Window layout persistence
-;; #:TODO/250910 - Create this as a stack (alist/plist) to save multiple
-;; window instances and pop to the desired layout based on workspace...
-;; Also want to keep this current option available, i.e. saving any custom
-;; window layout and restoraction on demand...
-;; Instead of a stack, I can take the functional programming approach as saving
-;; the layout as a closure --> see my functional calculator gcal for reference.
-(defvar r2--current-window-layout nil
-  "Persistant variable holding window layout.")
+;; TODO: Implement persistance across sessions
+;; |- window-state-get/window-state-put
+;; |- stash into s-expressions into a file that is loaded upon
+;;    Emacs boot/restart...
+(defvar r2--quick-layouts nil
+  "Alist of per-frame quick-save window configurations.
+Shape: ((FRAME . CONFIG) ...).  FRAME is a frame object compared
+by identity; CONFIG is a window-configuration object.  Pruned on
+frame deletion via `r2/prune--window-layouts-for-frame'.")
+
+(defvar r2--window-layout-alist nil
+  "Nested alist of saved window layouts, keyed by frame.
+Shape: ((FRAME . ((NAME . CONFIG) ...)) ...).
+FRAME is a frame object (compared by identity), NAME is a symbol,
+CONFIG is a window-configuration object.  Entries are pruned when
+their frame is deleted; see `r2/prune--window-layouts-for-frame'.")
+
+(defun r2--current-frame-layouts ()
+  "Return the inner alist of layouts for the selected frame, or nil."
+  (alist-get (selected-frame) r2--window-layout-alist nil nil #'eq))
+
+(defun r2--current-frame-layout-names ()
+  "Return a list of layout name strings saved under the selected frame."
+  (mapcar (lambda (e) (symbol-name (car e)))
+          (r2--current-frame-layouts)))
 
 (defun r2/save-current-windows ()
-  "Save current window layout"
+  "Save current window layout to this frame's quick slot."
   (interactive)
-  ;; #:TODO/250910 push current window configuration and workspace to stack
-  (setq r2--current-window-layout (current-window-configuration)))
+  (setf (alist-get (selected-frame) r2--quick-layouts nil nil #'eq)
+        (current-window-configuration))
+  (message "r2: window layout saved."))
 
 (defun r2/restore-last-windows ()
-  "Restore window layout to last saved"
+  "Restore window layout from this frame's quick slot."
   (interactive)
-  ;; #:TODO/250910 set based workspace
-  (set-window-configuration r2--current-window-layout))
+  (let ((config (alist-get (selected-frame) r2--quick-layouts nil nil #'eq)))
+    (if config
+        (progn
+          (set-window-configuration config)
+          (message "r2: window layout restored."))
+      (user-error "No saved window layout for this frame"))))
+
+(defun r2/save-window-layout (name)
+  "Save current window layout under NAME, scoped to the selected frame.
+Overwrites any existing layout with the same name in this frame."
+  (interactive
+   (list (intern (completing-read
+                  "Save layout as: "
+                  (r2--current-frame-layout-names)
+                  nil nil))))
+  (let* ((frame (selected-frame))
+         (inner (alist-get frame r2--window-layout-alist nil nil #'eq)))
+    (setf (alist-get name inner) (current-window-configuration))
+    (setf (alist-get frame r2--window-layout-alist nil nil #'eq) inner))
+  (message "r2: saved window layout `%s'." name))
+
+(defun r2/restore-window-layout (name)
+  "Restore a saved window layout by NAME from the selected frame's set."
+  (interactive
+   (list (intern (completing-read
+                  "Restore layout: "
+                  (r2--current-frame-layout-names)
+                  nil t))))
+  (let ((config (alist-get name (r2--current-frame-layouts))))
+    (if config
+        (progn
+          (set-window-configuration config)
+          (message "r2: restored window layout `%s'." name))
+      (user-error "No saved layout named `%s' in this frame" name))))
+
+(defun r2/delete-window-layout (name)
+  "Forget the saved window layout NAME in the selected frame."
+  (interactive
+   (list (intern (completing-read
+                  "Delete layout: "
+                  (r2--current-frame-layout-names)
+                  nil t))))
+  (let* ((frame (selected-frame))
+         (inner (alist-get frame r2--window-layout-alist nil nil #'eq)))
+    (setq inner (assq-delete-all name inner))
+    (if inner
+        (setf (alist-get frame r2--window-layout-alist nil nil #'eq) inner)
+      (setf (alist-get frame r2--window-layout-alist nil 'remove #'eq) nil)))
+  (message "r2: deleted window layout `%s'." name))
+
+(defun r2/list-window-layouts ()
+  "Show saved window layouts, grouped by frame."
+  (interactive)
+  (if (null r2--window-layout-alist)
+      (message "r2: no saved layouts.")
+    (let ((current (selected-frame)))
+      (message
+       "r2 layouts:\n%s"
+       (mapconcat
+        (lambda (entry)
+          (let* ((frame (car entry))
+                 (names (mapcar (lambda (e) (symbol-name (car e)))
+                                (cdr entry)))
+                 (label (if (eq frame current)
+                            "this frame"
+                          (or (frame-parameter frame 'name) "frame"))))
+            (format "  [%s] %s" label (mapconcat #'identity names ", "))))
+        r2--window-layout-alist
+        "\n")))))
+
+(r2->defhook r2/prune--window-layouts-for-frame
+  "Remove any saved layouts associated with FRAME."
+  (;;function body
+   (setf (alist-get frame r2--window-layout-alist nil 'remove #'eq) nil)
+   (setf (alist-get frame r2--quick-layouts nil 'remove #'eq) nil))
+  :args (frame)
+  :hook (delete-frame-functions))
+
+;; Keybindings
+(bind-key "C-c w g" #'r2/general-win-layout)       ; general layout
+(bind-key "C-c w c" #'r2/calendar-win-layout)      ; calendar layout
+(bind-key "C-c w s" #'r2/save-current-windows)     ; quick save
+(bind-key "C-c w r" #'r2/restore-last-windows)     ; quick restore
+(bind-key "C-c w S" #'r2/save-window-layout)       ; named save
+(bind-key "C-c w R" #'r2/restore-window-layout)    ; named restore
+(bind-key "C-c w D" #'r2/delete-window-layout)
+(bind-key "C-c w L" #'r2/list-window-layouts)
 
 
 
@@ -417,11 +543,12 @@ then persists the cleared state to disk."
     "Color for buffers not associated with any frame.")
 
   (defun r2/make-new-frame ()
-  "Make new frame, opening fresh with dashboard only."
-  (interactive)
-  (save-window-excursion
-    (switch-to-buffer "*dashboard*")
-    (make-frame-command)))
+    "Make new frame, opening fresh with dashboard only."
+    (interactive)
+    (save-window-excursion
+      (switch-to-buffer "*dashboard*")
+      (let ((frame (make-frame-command)))
+        (set-frame-parameter frame 'name nil))))
 
   (defun r2/beframe-buffer-color (buffer)
     "Return color for BUFFER based on its beframe association.
@@ -470,6 +597,21 @@ Returns specified color  for global buffers, frame-specific color otherwise."
   :ensure t
   :defer t
   :bind ("M-o" . ace-window))
+
+
+
+;;; Hacks
+
+(r2->defhook face-inheritance-fix
+  "Hack to fix face inheritance cycle."
+  (;; Function Body
+   (custom-set-faces
+    '(gnus-group-news-low ((t (:inherit nil))))
+    '(gnus-group-news-low-empty ((t (:inherit nil))))))
+
+  :if (eq system-type 'windows-nt)
+  :hook emacs-startup-hook
+  :depth 90)
 
 
 

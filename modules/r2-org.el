@@ -12,6 +12,37 @@
 (defvar *r2-org-denote-directory* "~/Documents/org/"
   "Directory where org files & denotes are kept.")
 
+(defvar *r2-temp-directory* (expand-file-name "tmp/" user-emacs-directory)
+  "Temporary directory specifically for Latex.")
+
+(make-directory *r2-temp-directory* t)
+
+(setq temporary-file-directory (file-name-as-directory *r2-temp-directory*))
+(setq org-preview-latex-image-directory
+      (file-name-as-directory *r2-temp-directory*))
+
+(setq org-preview-latex-process-alist
+      `((dvisvgm
+         :programs ("latex" "dvisvgm")
+         :description "dvi > svg"
+         :message "you need to install the programs: latex and dvisvgm."
+         :image-input-type "dvi"
+         :image-output-type "svg"
+         :image-size-adjust
+         ,(if (eq system-type 'windows-nt)
+              '(1.7 . 1.5)
+              '(1.3 . 1.2))
+         :latex-compiler
+         ,(list (concat "latex -interaction nonstopmode -halt-on-error "
+                        "-output-directory %o %f"))
+         :image-converter
+         ,(if (eq system-type 'windows-nt)
+              (list (concat "Set-Location -LiteralPath '%o'; "
+                            "dvisvgm '%b.dvi' --no-fonts --exact-bbox "
+                            "--scale=%S --output='%b.svg'"))
+            (list (concat "cd %o && dvisvgm '%b.dvi' --no-fonts "
+                          "--exact-bbox --scale=%S --output='%b.svg'"))))))
+
 
 
 ;;; Configure the ALMIGHTY Org system
@@ -61,7 +92,7 @@
    '(;; List Keywords
      (sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)" "HOLD(h)" "WAIT(w)")
      ;; Workout Keywords
-     (sequence "GOTO(g)" "|" "ZONE(z)" "REST(r)" "COMPLETE(e@/!)")
+     (sequence "GOTO(g)" "|" "ZONE(z)" "THNX(x)" "REST(r)" "COMPLETE(e@/!)")
      ;; Project Keywords
      (sequence "ACTIVE(a@/!)" "|" "CANCELED(c@/!)" "ARCHIVED(r@/!)")))
   ;; view color options via `M-x' `list-colors-display'
@@ -74,6 +105,7 @@
      ("HOLD" . "#bf616a")               ; Aurora Red
      ("DONE" . "#88c0d0")               ; Frost teal
      ("ZONE" . "#81a1c1")               ; Frost gray-blue
+     ("THNX" . "#5e81ac")               ; Frost gray-blue
      ("ACTIVE"    . "#5e81ac")          ; Frost blue
      ("COMPLETE"  . "#a3be8c")          ; Aurora green
      ("CANCELED"  . "#4c566a")          ; Polar Night Light Gray
@@ -86,6 +118,8 @@
   ;; Use Org to create Calendar entries (see calendar config below)
   (org-agenda-diary-file
    (expand-file-name "calendar.org" *r2-org-denote-directory*))
+  ;; For org-latex-preview and org-fragtog-mode
+  (org-preview-latex-default-process 'dvisvgm)
   :config
   ;; Org Helper Hook Functions
   (defun r2/org-fonts-hookfn ()
@@ -121,11 +155,18 @@
       (set-face-attribute (car face) nil
                           :inherit (cadr face))))
 
+  ;; (setq org-format-latex-header
+  ;;     (concat org-format-latex-header
+  ;;             "\n\\usepackage{lmodern}"))
+
   (defun r2/org-latex-hookfn ()
     "Hook function setting up configuration for Org using Latex."
 
     (setq org-latex-listings t
-          org-latex-pdf-process '("pdflatex -outdir=%o %f")
+          org-latex-pdf-process
+          (if (eq system-type 'windows-nt)
+              '("pdflatex -outdir=%o %f")         ; MikTex flag
+            '("pdflatex -output-director=o% %f")) ; TeX Live flag
           org-export-with-smart-quotes t)
 
     (with-eval-after-load 'ox-latex
@@ -179,7 +220,7 @@
   (setq org-structure-template-alist
         '(("el"  . "src emacs-lisp")
           ("cl"  . "src lisp")
-          ("sc"  . "src scheme")
+          ("scm" . "src scheme")
           ("js"  . "src json")
           ("sh"  . "src sh")
           ("co"  . "src conf")
@@ -208,6 +249,10 @@
   :hook (org-mode . org-superstar-mode)
   :custom
   (org-superstar-headline-bullets-list '("◉" "○" "●" "○" "●" "○" "●" "○" "●")))
+
+(use-package org-fragtog
+  :ensure t
+  :hook (org-mode . org-fragtog-mode))
 
 
 

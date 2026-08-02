@@ -39,8 +39,7 @@
   :ensure nil
   ;; TODO: Customize theme color for this element -> via ':config' keyword
   :diminish
-  ;; Only activate for lisp-mode
-  :hook ((prog-mode org-mode) . display-fill-column-indicator-mode)
+  :hook ((prog-mode) . display-fill-column-indicator-mode)
   :custom
   (fill-column 81)
   (display-fill-column-indicator-column fill-column)
@@ -199,6 +198,100 @@
                   (make-local-variable 'auto-hscroll-mode)
                   (setq auto-hscroll-mode nil)))))
 
+(use-package keycast
+  :ensure t
+  ;; :hook (prog-mode . keycast-mode-line-mode)
+  :bind ("C-c k" . keycast-header-line-mode))
+
+(use-package mermaid-mode
+  :ensure t)
+
+
+;;; Guile Scheme IDE
+
+(r2/setopts scheme-program-name "guile")
+
+;; `emacs-guix' dependencies:
+;; emacs-bui, emacs-dash, emacs-edit-indirect,
+;; emacs-geiser, emacs-geiser-guile, emacs-magit-popup
+;; module-import-compiled
+(use-package guix
+  :if (eq system-type 'gnu/linux)
+  :ensure t
+  :defer t)
+
+(use-package geiser
+  :if (eq system-type 'gnu/linux)
+  :ensure nil
+  :custom
+  (geiser-mode-auto-p nil)
+  (geiser-active-implementations '(guile))
+  (geiser-default-implementation '(guile)))
+
+(use-package consult
+  :if (eq system-type 'gnu/linux)
+  :ensure t)
+
+(use-package sesman
+  :if (eq system-type 'gnu/linux)
+  :ensure t
+  :pin nongnu)
+
+(use-package arei
+  :if (eq system-type 'gnu/linux)
+  :vc (:url "https://git.sr.ht/~abcdw/emacs-arei"
+       :lisp-dir "lisp"
+       :rev :newest)
+  :commands (r2/kill-ares-nrepl
+             r2/ares-nrepl-start)
+  :init
+  (global-arei-mode)
+  :config
+  (require 'cl-lib)
+
+  ;; Prevent `geiser' from interfering into completion (CAPF)
+  (setq geiser-mode-auto-p nil)
+
+  (defvar r2/ares-rs--process nil
+    "Holds process for Ares nREPL RPC server.")
+
+  (defun get-project-root-or-cwd ()
+    "Get Project Root or Current working directory"
+    (or (project-root (project-current))
+        default-directory))
+
+  (defun r2/kill-ares-nrepl ()
+    "Kill Ares RS nREPL RPC server."
+    (interactive)
+    (when r2/ares-rs--process
+      (ignore-errors
+        (kill-process r2/ares-rs--process)
+        (let ((port-file (expand-file-name
+                          (concat (get-project-root-or-cwd)
+                                  ".nrepl-port"))))
+          (when (file-exists-p port-file)
+            (delete-file port-file))))
+      (setq r2/ares-rs--process nil)))
+
+  (defun r2/ares-nrepl-start ()
+    "Start Ares nREPL RPC server in Project Root or CWD."
+    (interactive)
+
+    (let* ((path (get-project-root-or-cwd))
+           (bname (concat "*" (symbol-name (gensym "ares-nrepl-process-")) "*")))
+      (r2/kill-ares-nrepl)
+      (setq r2/ares-rs--process
+            (start-process-shell-command
+             bname
+             (get-buffer-create bname)
+             (concat "cd " path " && "
+                     "ares-nrepl "
+                     " -- "
+                     "-L " path)))
+      ;; Automatically start sesman session
+      (when r2/ares-rs--process
+        (ignore-errors
+          (sesman-link-with-least-specific))))))
 
 
 ;;; Common Lisp IDE
@@ -269,70 +362,11 @@
 
 
 
-;;; Guile Scheme IDE
-
-;; Set default to guile.
-(r2/setopts scheme-program-name "guile")
-
-;; `emacs-guix' dependencies:
-;; emacs-bui, emacs-dash, emacs-edit-indirect,
-;; emacs-geiser, emacs-geiser-guile, emacs-magit-popup
-;; module-import-compiled
-(use-package guix
-  :disabled)
-
-(use-package arei
-  :disabled
-  :after (sesman)
-  :config
-  (require 'cl-lib)
-
-  ;; Prevent `geiser' from interfering into completion (CAPF)
-  (setq geiser-mode-auto-p nil)
-
-  (defvar r2/ares-rs--process nil
-    "Holds process for Ares nREPL RPC server.")
-
-  (defun get-project-root-or-cwd ()
-    "Get Project Root or Current working directory"
-    (or (project-root (project-current))
-        default-directory))
-
-  (defun r2/kill-ares-nrepl ()
-    "Kill Ares RS nREPL RPC server."
-    (interactive)
-    (when r2/ares-rs--process
-      (ignore-errors
-        (kill-process r2/ares-rs--process)
-        (let ((port-file (expand-file-name
-                          (concat (get-project-root-or-cwd)
-                                  ".nrepl-port"))))
-          (when (file-exists-p port-file)
-            (delete-file port-file))))
-      (setq r2/ares-rs--process nil)))
-
-  (defun r2/ares-nrepl-start ()
-    "Start Ares nREPL RPC server in Project Root or CWD."
-    (interactive)
-
-    (let* ((path (get-project-root-or-cwd))
-           (bname (concat "*" (symbol-name (gensym "ares-nrepl-process-")) "*")))
-      (r2/kill-ares-nrepl)
-      (setq r2/ares-rs--process
-            (start-process-shell-command
-             bname
-             (get-buffer-create bname)
-             (concat "cd " path " && "
-                     "ares-nrepl "
-                     " -- "
-                     "-L " path)))
-      ;; Automatically start sesman session
-      (when r2/ares-rs--process
-        (ignore-errors
-         (sesman-link-with-least-specific))))))
-
-
 ;; OTLS - Other Than Lisp Support
+
+;; JSL
+(use-package jsl-mode
+  :vc (:url "https://codeberg.org/logoraz/jsl-mode.git" :rev :newest))
 
 ;; Nix
 (use-package nix-mode
@@ -341,62 +375,7 @@
 
 ;; VBA
 (use-package vba-mode
-  :vc (:url "https://github.com/ayanyan/vba-mode.git" :rev :newest)
-  :mode ("\\.\\(vba\\|bas\\|cls\\|frm\\)\\'" . vba-mode)
-  :hook ((vba-mode . font-lock-mode)
-         (vba-mode . r2/vba-config))
-  :config
-
-  ;; Hacks to fix where vba-mode gets it wrong.
-  ;; TOTO:--> fork repo and correct therein
-  (defun r2/vba-config ()
-    "Set configuration for vba"
-    (setq-local tab-width 4
-                indent-tabs-mode nil)
-    (setq vba-mode-indent 4))
-
-  ;; Add highlighting for the keyword "Const"
-  (font-lock-add-keywords
-   'vba-mode
-   '(("\\<Const\\>" . font-lock-constant-face)
-
-     ;; Compiler metadata
-     ("\\<Attribute\\>" . font-lock-preprocessor-face)
-
-     ;; Runtime builtin
-     ("\\<DoEvents\\>" . font-lock-builtin-face)
-
-     ;; Declaration/structural keywords (match Dim)
-     ("\\<WithEvents\\>" . font-lock-type-face)
-     ("\\<Implements\\>" . font-lock-type-face)
-     ("\\<Enum\\>"       . font-lock-type-face)
-     ("\\<Type\\>"       . font-lock-type-face)
-     ("\\<ReDim\\>"      . font-lock-type-face)
-
-     ;; Parameter modifiers
-     ("\\<Optional\\>" . font-lock-keyword-face)
-     ("\\<ByRef\\>"    . font-lock-keyword-face)
-     ("\\<ByVal\\>"    . font-lock-keyword-face)
-
-     ;; Misc keywords
-     ("\\<Erase\\>"   . font-lock-keyword-face)
-     ("\\<Static\\>"  . font-lock-keyword-face)
-     ("\\<Declare\\>" . font-lock-keyword-face)
-     ("\\<PtrSafe\\>" . font-lock-keyword-face)
-     ("\\<Lib\\>"     . font-lock-keyword-face)
-     ("\\<Alias\\>"   . font-lock-keyword-face)
-
-     ;; Property blocks
-     ("\\<Property[ \t]+Get\\>" . font-lock-keyword-face)
-     ("\\<Property[ \t]+Let\\>" . font-lock-keyword-face)
-     ("\\<Property[ \t]+Set\\>" . font-lock-keyword-face)))
-
-  ;;Prevent keyword auto-capitalization inside comments and strings
-  (advice-add
-   'expand-abbrev :around
-   (lambda (orig-fun &rest args)
-     (unless (nth 8 (syntax-ppss)) ;; inside comment or string?
-       (apply orig-fun args)))))
+  :vc (:url "https://codeberg.org/logoraz/vba-mode.git" :rev :newest))
 
 
 
