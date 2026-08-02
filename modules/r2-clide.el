@@ -366,7 +366,7 @@
 
 ;; JSL
 (use-package jsl-mode
-  :vc (:url "https://codeberg.org/logoraz/jsl-mode.git" :rev :newest))
+  :vc (:url "https://github.com/logoraz/jsl-mode.git" :rev :newest))
 
 ;; Nix
 (use-package nix-mode
@@ -375,7 +375,7 @@
 
 ;; VBA
 (use-package vba-mode
-  :vc (:url "https://codeberg.org/logoraz/vba-mode.git" :rev :newest))
+  :vc (:url "https://github.com/logoraz/vba-mode.git" :rev :newest))
 
 
 
