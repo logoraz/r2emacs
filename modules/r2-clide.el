@@ -82,8 +82,7 @@
 (use-package paredit
   :ensure t
   :diminish paredit-mode
-  :hook ((eval-expression-minibuffer-setup
-          lisp-interaction-mode
+  :hook ((lisp-interaction-mode
           emacs-lisp-mode
           lisp-mode
           scheme-mode)
