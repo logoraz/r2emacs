@@ -341,7 +341,11 @@
   (sly-default-lisp 'sbcl
                     "Set default lisp to Steel Bank Common Lisp.")
   :config
+  ;; `sly-setup' loads contribs once at init to avoid a lisp-mode-hook race;
+  ;; `sly-symbol-completion-mode' is global, so disable it once here too,
+  ;; not per-buffer (that caused the corrupted-timer bug).
   (sly-setup '(sly-fancy))
+  (sly-symbol-completion-mode -1)
   ;; Disable Sylvester the cat
   (setq sly-mrepl-pop-sylvester nil)
 
@@ -381,8 +385,7 @@
   ;; Sly completions
   (r2->defhook r2/sly-completions
     "Set flex to completion styles."
-    ((setq-local completion-styles '(sly--external-completion basic flex))
-     (sly-symbol-completion-mode -1))
+    ((setq-local completion-styles '(sly--external-completion basic flex)))
     :hook sly-mode-hook)
 
   ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
