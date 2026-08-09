@@ -385,7 +385,7 @@
   ;; Sly completions
   (r2->defhook r2/sly-completions
     "Set flex to completion styles."
-    ((setq-local completion-styles '(sly--external-completion basic flex)))
+    ((setq-local completion-styles '(basic flex)))
     :hook sly-mode-hook)
 
   ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
