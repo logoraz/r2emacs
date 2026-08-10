@@ -269,7 +269,9 @@
 (r2/setopts package-enable-at-startup t
             "Enable for things to work, greatly impacts startup time."
             package-user-dir (expand-file-name "elpa" r2-xdg-cache-home)
-            "Relocate elpa to Emacs XDG_CACHE_HOME location.")
+            "Relocate elpa to Emacs XDG_CACHE_HOME location."
+            package-gnupghome-dir (expand-file-name "gnupg" package-user-dir)
+            "Relocate gnupg to Emacs XDG_CACHE_HOME location")
 
 (add-to-list 'package-archives
              '("stable" . "https://stable.melpa.org/packages/") :append)

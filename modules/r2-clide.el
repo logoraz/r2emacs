@@ -32,7 +32,7 @@
 
 (use-package display-line-numbers
   :ensure nil
-  :hook ((scheme-mode lisp-mode emacs-lisp-mode nix-mode)
+  :hook ((scheme-mode lisp-mode emacs-lisp-mode)
          . display-line-numbers-mode))
 
 (use-package display-fill-column-indicator
@@ -420,14 +420,15 @@
 (use-package jsl-mode
   :vc (:url "https://github.com/logoraz/jsl-mode.git" :rev :newest))
 
-;; Nix
-(use-package nix-mode
-  :vc (:url "https://github.com/NixOS/nix-mode.git" :rev :newest)
-  :mode "\\.nix\\'")
-
 ;; VBA
 (use-package vba-mode
   :vc (:url "https://github.com/logoraz/vba-mode.git" :rev :newest))
+
+;; Nix
+(use-package nix-mode
+  :disabled
+  :vc (:url "https://github.com/NixOS/nix-mode.git" :rev :newest)
+  :mode "\\.nix\\'")
 
 
 
