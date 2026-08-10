@@ -349,6 +349,10 @@
   ;; Disable Sylvester the cat
   (setq sly-mrepl-pop-sylvester nil)
 
+  ;; sly-common-lisp-indent-function has no built-in spec for `:use' and
+  ;; its generic fallback doesn't align args under `:cl' -- force it.
+  (put ':use 'common-lisp-indent-function 0)
+
   ;; Provide proper syntax highlighting for `defsystem'
   (font-lock-add-keywords
    'lisp-mode
