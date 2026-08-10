@@ -157,6 +157,24 @@ Falls back to `next-window' if multiple windows tie for tallest."
   :custom ((image-dired-thumb-size 256)
            (image-dired-thumbnail-storage 'standard-large)))
 
+(use-package dired-aux
+  :ensure nil
+  :defer t
+  :after dired
+  :config
+  ;; shell-command-guess-xdg (Emacs 30+) does
+  ;; (replace-regexp-in-string " .*" "" (gethash "Exec" desktop))
+  ;; with no nil-guard, so any matched .desktop file missing Exec=
+  ;; crashes the whole !/& prompt. Wrap it so a bad entry is skipped
+  ;; and named instead of erroring out entirely.
+  (advice-add 'shell-command-guess-xdg :around
+              (lambda (orig-fn commands files)
+                (condition-case err
+                    (funcall orig-fn commands files)
+                  (wrong-type-argument
+                   (message "shell-command-guess-xdg: skipping malformed .desktop entry (%s)"
+                            (error-message-string err))
+                   commands)))))
 
 
 
