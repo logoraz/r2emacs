@@ -121,6 +121,31 @@
   ;; For org-latex-preview and org-fragtog-mode
   (org-preview-latex-default-process 'dvisvgm)
   :config
+  ;; org.el's fontification cond has no branch for "comment" block
+  ;; bodies (only src/export/example and quote/verse get a face) --
+  ;; give comment blocks the same org-block background so they're
+  ;; visually consistent with other block types.
+  (font-lock-add-keywords
+   'org-mode
+   '(("^[ \t]*#\\+begin_comment\\(?:.\\|\n\\)*?#\\+end_comment"
+      0 'org-block prepend)))
+
+  ;; Only need the Holy Trinity of languages...
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((lisp       . t)   ; Common Lisp: the Lord of Lisp's
+     (scheme     . t)   ; the spirit of Jezebel
+     (emacs-lisp . t))) ; our daily bread
+
+  ;; and their accompanying dialect aliases for src-block headers.
+  (dolist (lang
+           '(("lisp"      . lisp)
+             ("scheme"    . scheme)
+             ("json"      . json)
+             ("conf-unix" . conf-unix)
+             ("conf-xorg" . conf-xdefaults)))
+    (push lang org-src-lang-modes))
+
   ;; Org Helper Hook Functions
   (defun r2/org-fonts-hookfn ()
     "Hook function enabling Org faces/fonts."
@@ -155,10 +180,6 @@
       (set-face-attribute (car face) nil
                           :inherit (cadr face))))
 
-  ;; (setq org-format-latex-header
-  ;;     (concat org-format-latex-header
-  ;;             "\n\\usepackage{lmodern}"))
-
   (defun r2/org-latex-hookfn ()
     "Hook function setting up configuration for Org using Latex."
 
@@ -181,21 +202,6 @@
                      ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
                      ("\\paragraph{%s}"     . "\\paragraph*{%s}")
                      ("\\subparagraph{%s}"  . "\\subparagraph*{%s}")))))
-
-  ;; Org Babel Settings - only need the Holy Trinity of languages!
-  (org-babel-do-load-languages
-   'org-babel-load-languages
-   '((emacs-lisp . t)
-     (lisp       . t)
-     (scheme     . t)))
-
-  (dolist (lang
-           '(("lisp"      . lisp)
-             ("scheme"    . scheme)
-             ("json"      . json)
-             ("conf-unix" . conf-unix)
-             ("conf-xorg" . conf-xdefaults)))
-    (push lang org-src-lang-modes))
 
   (defun r2/org-export-html-to-dir (dir)
     "Export current Org file to HTML in DIR."
