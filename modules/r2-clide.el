@@ -205,6 +205,136 @@
 (use-package mermaid-mode
   :ensure t)
 
+
+
+;;; Common Lisp IDE
+(use-package lisp-comment-dwim
+  :disable
+  :vc (:url "https://github.com/dotemacs/lisp-comment-dwim.el" :branch "main")
+  :custom (lisp-comment-dwim-comment-macro "#+nil")
+  :config
+  (lisp-comment-dwim-setup-keybindings))
+
+;; NOTE: `sly.el' and its `sly-fancy' contrib (via `(sly-setup '(sly-fancy))'
+;; in `:config') must be loaded before the first lisp-mode buffer's
+;; `lisp-mode-hook' runs -- otherwise `sly-editing-mode' triggers the
+;; load lazily, mid-iteration of that same hook run, so contrib setup
+;; (which mutates `lisp-mode-hook' and `font-lock-extend-region-functions')
+;; misses the first buffer's pass entirely, and `#+nil'-style
+;; reader-conditional fontification silently fails to apply until the
+;; buffer is edited or reopened.
+;;
+;; We force the load via an idle timer in `:init' rather than `:demand
+;; t', since the latter loads synchronously during init and measurably
+;; slows startup. The idle timer still guarantees `sly' is fully loaded
+;; before any realistic first buffer-open, without that cost -- `:config'
+;; runs via `with-eval-after-load' either way, so a plain `(require
+;; 'sly)' from the timer triggers it same as `:demand t' would.
+;;
+;; Only `sly-editing-mode' itself goes through `use-package's `:hook' --
+;; it's autoloaded by `sly' proper, so `use-package' can safely generate
+;; the autoload stub for it. Our own hook functions (`r2/sly-auto-connect',
+;; `r2/sly-completions', `r2/register-mrepl-frame', etc.) are defined
+;; inside this block's `:config', not inside `sly' itself, so `:hook'
+;; would generate an autoload pointing at `sly.elc' for a symbol that
+;; file never defines -- it fails at hook-run time with a "failed to
+;; define function" error. Wiring them via our own hooking macro instead
+;; runs `add-hook' directly against functions that already exist by the
+;; time `:config' reaches them, sidestepping that entirely.
+;;
+;; `r2/sly-refresh-fontification' on `sly-connected-hook' covers the
+;; remaining gap: the first buffer's initial fontification pass runs
+;; before the async SLY connection completes.
+(use-package sly
+  :ensure t
+  ;; Enable sly IDE for Common Lisp
+  :hook ((lisp-mode . sly-editing-mode))
+  :init
+  (run-with-idle-timer 1 nil (lambda () (require 'sly)))
+  :custom
+  (sly-default-lisp 'sbcl
+                    "Set default lisp to Steel Bank Common Lisp.")
+  :config
+  ;; `sly-setup' loads contribs once at init to avoid a lisp-mode-hook race;
+  ;; `sly-symbol-completion-mode' is global, so disable it once here too,
+  ;; not per-buffer (that caused the corrupted-timer bug).
+  (sly-setup '(sly-fancy))
+  (sly-symbol-completion-mode -1)
+  ;; Disable Sylvester the cat
+  (setq sly-mrepl-pop-sylvester nil)
+
+  ;; sly-common-lisp-indent-function has no built-in spec for `:use' and
+  ;; its generic fallback doesn't align args under `:cl' -- force it.
+  (put ':use 'common-lisp-indent-function 0)
+
+  ;; Provide proper syntax highlighting for `defsystem'
+  (font-lock-add-keywords
+   'lisp-mode
+   '(("(\\s-*\\(defsystem\\)\\>" 1 font-lock-keyword-face append)
+     ;; `uiop:define-package' isn't in lisp-mode's def-form regex (which
+     ;; already covers `defpackage' via its `pa\(ckage\|rameter\)'
+     ;; alternation) -- mirror that treatment here, including matching
+     ;; `defpackage's `lisp-define-type' of `type' so the package-name
+     ;; symbol gets `font-lock-type-face' too, not the generic function-name
+     ;; face.
+     ("(\\(uiop:define-package\\)\\_>[ \t']*\\(\\(?:\\sw\\|\\s_\\)+\\)?"
+      (1 font-lock-keyword-face)
+      (2 font-lock-type-face nil t))))
+
+  ;; Invoke SLY with a negative prefix argument, M-- M-x sly,
+  ;; and you can select a program from that list.
+  (setq sly-lisp-implementations
+        '((sbcl  ("sbcl") :coding-system utf-8-unix)
+          (clasp ("clasp") :coding-system utf-8-unix)
+          (ecl   ("ecl")  :coding-system utf-8-unix)))
+
+  ;; Ensure history file exists
+  (let ((history-file (expand-file-name "var/sly/mrepl-history"
+                                        r2-xdg-cache-home)))
+    (make-directory (file-name-directory history-file) t)
+    (unless (file-exists-p history-file)
+      (write-region "" nil history-file)))
+
+  ;; Open Sly mREPL in background
+  (setq display-buffer-alist
+        (cons '("\\*sly-mrepl"
+                (display-buffer-no-window)
+                (allow-no-window . t))
+              display-buffer-alist))
+
+  ;; Register sly mrepl buffer with the frame it is openned with instead of it
+  ;; being considered unassociated from setting it to the background..
+  (r2->defhook r2/register-mrepl-frame
+    "Associates sly-mrepl buffer  with the curent frame."
+    ((beframe-assume-buffers-matching-regexp-all-frames "\\*sly-mrepl"))
+    :hook sly-mrepl-mode-hook)
+
+  ;; Sly completions
+  (r2->defhook r2/sly-completions
+    "Set flex to completion styles."
+    ((setq-local completion-styles '(basic flex)))
+    :hook sly-mode-hook)
+
+  ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
+  (r2->defhook r2/sly-auto-connect
+    "Auto-connect to SLY if not already connected."
+    ((interactive)
+     (unless (sly-connected-p)
+       (save-excursion (sly))))
+    :hook lisp-mode-hook)
+
+  (r2->defhook r2/sly-refresh-fontification
+    "Refresh fontification in Lisp buffers once SLY connects."
+    ((run-at-time
+      0 nil
+      (lambda ()
+        (dolist (buf (buffer-list))
+          (with-current-buffer buf
+            (when (eq major-mode 'lisp-mode)
+              (font-lock-flush)
+              (font-lock-ensure)))))))
+    :hook sly-connected-hook))
+
 
 ;;; Guile Scheme IDE
 
@@ -291,126 +421,6 @@
       (when r2/ares-rs--process
         (ignore-errors
           (sesman-link-with-least-specific))))))
-
-
-;;; Common Lisp IDE
-(use-package lisp-comment-dwim
-  :disable
-  :vc (:url "https://github.com/dotemacs/lisp-comment-dwim.el" :branch "main")
-  :custom (lisp-comment-dwim-comment-macro "#+nil")
-  :config
-  (lisp-comment-dwim-setup-keybindings))
-
-;; NOTE: `sly.el' and its `sly-fancy' contrib (via `(sly-setup '(sly-fancy))'
-;; in `:config') must be loaded before the first lisp-mode buffer's
-;; `lisp-mode-hook' runs -- otherwise `sly-editing-mode' triggers the
-;; load lazily, mid-iteration of that same hook run, so contrib setup
-;; (which mutates `lisp-mode-hook' and `font-lock-extend-region-functions')
-;; misses the first buffer's pass entirely, and `#+nil'-style
-;; reader-conditional fontification silently fails to apply until the
-;; buffer is edited or reopened.
-;;
-;; We force the load via an idle timer in `:init' rather than `:demand
-;; t', since the latter loads synchronously during init and measurably
-;; slows startup. The idle timer still guarantees `sly' is fully loaded
-;; before any realistic first buffer-open, without that cost -- `:config'
-;; runs via `with-eval-after-load' either way, so a plain `(require
-;; 'sly)' from the timer triggers it same as `:demand t' would.
-;;
-;; Only `sly-editing-mode' itself goes through `use-package's `:hook' --
-;; it's autoloaded by `sly' proper, so `use-package' can safely generate
-;; the autoload stub for it. Our own hook functions (`r2/sly-auto-connect',
-;; `r2/sly-completions', `r2/register-mrepl-frame', etc.) are defined
-;; inside this block's `:config', not inside `sly' itself, so `:hook'
-;; would generate an autoload pointing at `sly.elc' for a symbol that
-;; file never defines -- it fails at hook-run time with a "failed to
-;; define function" error. Wiring them via our own hooking macro instead
-;; runs `add-hook' directly against functions that already exist by the
-;; time `:config' reaches them, sidestepping that entirely.
-;;
-;; `r2/sly-refresh-fontification' on `sly-connected-hook' covers the
-;; remaining gap: the first buffer's initial fontification pass runs
-;; before the async SLY connection completes.
-(use-package sly
-  :ensure t
-  ;; Enable sly IDE for Common Lisp
-  :hook ((lisp-mode . sly-editing-mode))
-  :init
-  (run-with-idle-timer 1 nil (lambda () (require 'sly)))
-  :custom
-  (sly-default-lisp 'sbcl
-                    "Set default lisp to Steel Bank Common Lisp.")
-  :config
-  ;; `sly-setup' loads contribs once at init to avoid a lisp-mode-hook race;
-  ;; `sly-symbol-completion-mode' is global, so disable it once here too,
-  ;; not per-buffer (that caused the corrupted-timer bug).
-  (sly-setup '(sly-fancy))
-  (sly-symbol-completion-mode -1)
-  ;; Disable Sylvester the cat
-  (setq sly-mrepl-pop-sylvester nil)
-
-  ;; sly-common-lisp-indent-function has no built-in spec for `:use' and
-  ;; its generic fallback doesn't align args under `:cl' -- force it.
-  (put ':use 'common-lisp-indent-function 0)
-
-  ;; Provide proper syntax highlighting for `defsystem'
-  (font-lock-add-keywords
-   'lisp-mode
-   '(("(\\s-*\\(defsystem\\)\\>" 1 font-lock-keyword-face append)))
-
-  ;; Invoke SLY with a negative prefix argument, M-- M-x sly,
-  ;; and you can select a program from that list.
-  (setq sly-lisp-implementations
-        '((sbcl  ("sbcl") :coding-system utf-8-unix)
-          (clasp ("clasp") :coding-system utf-8-unix)
-          (ecl   ("ecl")  :coding-system utf-8-unix)))
-
-  ;; Ensure history file exists
-  (let ((history-file (expand-file-name "var/sly/mrepl-history"
-                                        r2-xdg-cache-home)))
-    (make-directory (file-name-directory history-file) t)
-    (unless (file-exists-p history-file)
-      (write-region "" nil history-file)))
-
-  ;; Open Sly mREPL in background
-  (setq display-buffer-alist
-        (cons '("\\*sly-mrepl"
-                (display-buffer-no-window)
-                (allow-no-window . t))
-              display-buffer-alist))
-
-  ;; Register sly mrepl buffer with the frame it is openned with instead of it
-  ;; being considered unassociated from setting it to the background..
-  (r2->defhook r2/register-mrepl-frame
-    "Associates sly-mrepl buffer  with the curent frame."
-    ((beframe-assume-buffers-matching-regexp-all-frames "\\*sly-mrepl"))
-    :hook sly-mrepl-mode-hook)
-
-  ;; Sly completions
-  (r2->defhook r2/sly-completions
-    "Set flex to completion styles."
-    ((setq-local completion-styles '(basic flex)))
-    :hook sly-mode-hook)
-
-  ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
-  (r2->defhook r2/sly-auto-connect
-    "Auto-connect to SLY if not already connected."
-    ((interactive)
-     (unless (sly-connected-p)
-       (save-excursion (sly))))
-    :hook lisp-mode-hook)
-
-  (r2->defhook r2/sly-refresh-fontification
-    "Refresh fontification in Lisp buffers once SLY connects."
-    ((run-at-time
-      0 nil
-      (lambda ()
-        (dolist (buf (buffer-list))
-          (with-current-buffer buf
-            (when (eq major-mode 'lisp-mode)
-              (font-lock-flush)
-              (font-lock-ensure)))))))
-    :hook sly-connected-hook))
 
 
 
