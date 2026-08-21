@@ -263,9 +263,26 @@
   ;; Disable Sylvester the cat
   (setq sly-mrepl-pop-sylvester nil)
 
-  ;; sly-common-lisp-indent-function has no built-in spec for `:use' and
-  ;; its generic fallback doesn't align args under `:cl' -- force it.
-  (put ':use 'common-lisp-indent-function 0)
+  ;; sly-common-lisp-indent-function's generic fallback misaligns any
+  ;; clause whose arguments are :keyword-style symbols (mistaken for a
+  ;; plist) rather than #:uninterned-style -- force first-arg alignment
+  ;; for these clauses regardless of style, in both `defpackage' and
+  ;; `uiop:define-package'.
+  (dolist (kw '(;; Standard `defpackage' clauses
+                :use
+                :import-from
+                :export
+                :intern
+                :nicknames
+                :shadow
+                :shadowing-import-from
+                ;; `uiop:define-package' extensions
+                :mix
+                :use-reexport
+                :mix-reexport
+                :unintern
+                :recycle))
+    (put kw 'common-lisp-indent-function 0))
 
   ;; Provide proper syntax highlighting for `defsystem'
   (font-lock-add-keywords
