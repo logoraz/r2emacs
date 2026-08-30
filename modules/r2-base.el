@@ -596,7 +596,11 @@ Returns specified color  for global buffers, frame-specific color otherwise."
 (use-package ace-window
   :ensure t
   :defer t
-  :bind ("M-o" . ace-window))
+  :bind ("M-o" . ace-window)
+  :config
+  (set-face-attribute 'aw-leading-char-face nil
+                       :height (+ (if (boundp 'font-height) font-height 100) 40)
+                       :weight 'bold))
 
 
 
