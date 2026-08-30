@@ -351,7 +351,7 @@ then persists the cleared state to disk."
         dashboard-projects-backend 'project-el
         dashboard-items '((projects  . 7)
                           (bookmarks . 7)
-                          (recents   . 12))
+                          (recents   . 10))
         initial-buffer-choice (lambda () (get-buffer "*dashboard*")))
   (dashboard-setup-startup-hook))
 
