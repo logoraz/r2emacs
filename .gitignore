@@ -1,6 +1,8 @@
 # Root
 /elpa*
 
+# Modules
+/modules/r2-secrets.el
 
 ## Extensions
 /syntax/*.elc
@@ -10,7 +12,3 @@
 ## contents entirely — each subdirectory is independently cloned and updated.
 /contrib/*
 !/contrib/.gitkeep
-
-
-## Modules
-
