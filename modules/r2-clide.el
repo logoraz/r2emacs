@@ -247,6 +247,7 @@
 ;; before the async SLY connection completes.
 (use-package sly
   :ensure t
+  :mode ("\\.sexp\\'" . lisp-mode)
   ;; Enable sly IDE for Common Lisp
   :hook ((lisp-mode . sly-editing-mode))
   :init
@@ -329,7 +330,9 @@
   ;; Sly completions
   (r2->defhook r2/sly-completions
     "Set flex to completion styles."
-    ((setq-local completion-styles '(basic flex)))
+    ((setq-local completion-styles '(basic flex))
+     ;; Prevents auto-timer loop completions when typing a reader macro
+     (setq-local corfu-auto nil))
     :hook sly-mode-hook)
 
   ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster

@@ -1,5 +1,7 @@
 # Root
 /elpa*
+*.zip
+*.tar.gz
 
 # Modules
 /modules/r2-secrets.el
