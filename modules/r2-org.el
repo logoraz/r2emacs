@@ -59,6 +59,7 @@
   :bind (("C-c a" . org-agenda)
          ("C-c c" . org-capture))
   :custom
+  (org-fontify-quote-and-verse-blocks t)
   (org-auto-align-tags nil)
   (org-tags-column 0)
   (org-catch-invisible-edits 'show-and-error)
