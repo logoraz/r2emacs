@@ -446,6 +446,11 @@
 
 ;; OTLS - Other Than Lisp Support
 
+;; CSV
+(use-package csv-mode
+  :ensure t
+  :mode "\\.csv\\'")
+
 ;; JSL
 (use-package jsl-mode
   :vc (:url "https://github.com/logoraz/jsl-mode.git" :rev :newest))
