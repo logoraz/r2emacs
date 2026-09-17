@@ -47,19 +47,39 @@
 
 (bind-key "C-c o" 'r2/switch-to-minibuffer)
 
-(defun r2/clear-history ()
-  "Clear recent files, project list, and minibuffer history.
-Resets `recentf-list', `project--list', and common history variables,
-then persists the cleared state to disk."
+(defun r2/clear-file-history (&optional noconfirm)
+  "Clear recent files history.
+Resets `recentf-list' and persists the cleared state to disk.
+With NOCONFIRM, skip the confirmation prompt (used by
+`r2/clear-all-history')."
   (interactive)
-  (when (yes-or-no-p "Clear all recent files, projects, and minibuffer history? ")
-    ;; Recent files
+  (when (or noconfirm (yes-or-no-p "Clear recent files history? "))
     (setq recentf-list nil)
     (recentf-save-list)
-    ;; Project list
+    (when (get-buffer "*dashboard*")
+      (dashboard-refresh-buffer))
+    (unless noconfirm (message "r2: file history cleared."))))
+
+(defun r2/clear-project-history (&optional noconfirm)
+  "Clear the project list.
+Resets `project--list' and persists the cleared state to disk.
+With NOCONFIRM, skip the confirmation prompt (used by
+`r2/clear-all-history')."
+  (interactive)
+  (when (or noconfirm (yes-or-no-p "Clear project list? "))
     (setq project--list nil)
     (project--write-project-list)
-    ;; Minibuffer & search histories
+    (when (get-buffer "*dashboard*")
+      (dashboard-refresh-buffer))
+    (unless noconfirm (message "r2: project history cleared."))))
+
+(defun r2/clear-minibuffer-history (&optional noconfirm)
+  "Clear minibuffer, command, and search histories.
+Resets common history variables and persists via `savehist' if
+loaded. With NOCONFIRM, skip the confirmation prompt (used by
+`r2/clear-all-history')."
+  (interactive)
+  (when (or noconfirm (yes-or-no-p "Clear minibuffer and search history? "))
     (dolist (var '(minibuffer-history
                    extended-command-history
                    command-history
@@ -69,12 +89,19 @@ then persists the cleared state to disk."
                    kill-ring))
       (when (boundp var)
         (set var nil)))
-    ;; Persist savehist if loaded
     (when (bound-and-true-p savehist-mode)
       (savehist-save))
-    ;; Refresh dashboard if open
-    (when (get-buffer "*dashboard*")
-      (dashboard-refresh-buffer))
+    (unless noconfirm (message "r2: minibuffer history cleared."))))
+
+(defun r2/clear-all-history ()
+  "Clear recent files, project list, and minibuffer history.
+Runs `r2/clear-file-history', `r2/clear-project-history', and
+`r2/clear-minibuffer-history' together under a single confirmation."
+  (interactive)
+  (when (yes-or-no-p "Clear all recent files, projects, and minibuffer history? ")
+    (r2/clear-file-history t)
+    (r2/clear-project-history t)
+    (r2/clear-minibuffer-history t)
     (message "r2: history cleared.")))
 
 ;;; Backups
