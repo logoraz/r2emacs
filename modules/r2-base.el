@@ -19,6 +19,11 @@
 ;;; File Settings: Auto Save, Backups, History, Bookmark, Recent Files,
 ;;; & Minibuffer control
 
+;;; Auto Save: Prefix for generating auto-save-list-file-name
+;; see - `auto-save-list-file-name'
+(setq auto-save-list-file-prefix (expand-file-name "auto-save/.saves-"
+                                                   r2-var-directory))
+
 ;;; Helpers/Utilities
 
 ;;; Open files with sudo
@@ -32,10 +37,22 @@
 (unless (eq system-type 'gnu/linux)
   (global-set-key (kbd "C-c s") #'r2/sudo-edit-current-file))
 
-;;; Auto Save: Prefix for generating auto-save-list-file-name
-;; see - `auto-save-list-file-name'
-(setq auto-save-list-file-prefix (expand-file-name "auto-save/.saves-"
-                                                   r2-var-directory))
+(defun r2/svg-to-png (svg-file)
+  "Convert SVG-FILE to a PNG of the same name via rsvg-convert."
+  (interactive "fSVG file: ")
+  (unless (executable-find "rsvg-convert")
+    (user-error "rsvg-convert not found on PATH -- install librsvg"))
+  (let* ((svg-file (expand-file-name svg-file))
+         (png-file (concat (file-name-sans-extension svg-file) ".png"))
+         (err-buf (generate-new-buffer " *rsvg-convert-error*"))
+         (status (call-process "rsvg-convert" nil err-buf nil
+                                "-o" png-file svg-file)))
+    (if (zerop status)
+        (message "Wrote %s" png-file)
+      (let ((err (with-current-buffer err-buf (buffer-string))))
+        (kill-buffer err-buf)
+        (user-error "rsvg-convert failed (%s): %s" status err)))
+    (when (zerop status) (kill-buffer err-buf))))
 
 ;;; Minibuffer acrobatics
 (defun r2/switch-to-minibuffer ()
