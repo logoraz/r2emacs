@@ -233,7 +233,8 @@
           ("co"  . "src conf")
           ("C"   . "src C")
           ("bib" . "src bibtex")
-          ("cm"  . "comment"))))
+          ("cm"  . "comment")
+          ("qt"  . "quote"))))
 
 
 ;;; External Org Packages
