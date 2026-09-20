@@ -390,6 +390,23 @@ project ROOT."
             ((and v (process-live-p v)) v)
             (t nil))))
 
+  (defun r2/sly-quit-project (&optional root)
+    "Quit the SLY connection (and its inferior Lisp) for project ROOT,
+defaulting to the current buffer's project, and forget it so a
+fresh connection starts next time this project is visited."
+    (interactive)
+    (let* ((root (or root (r2/sly-project-root)))
+           (conn (gethash root r2/sly-project-connections)))
+      (cond
+       ((eq conn 'pending)
+        (user-error "Connection for %s is still being established" root))
+       ((and conn (process-live-p conn))
+        (sly-quit-lisp-internal conn 'sly-quit-sentinel t)
+        (remhash root r2/sly-project-connections)
+        (message "Quitting SLY for project: %s" root))
+       (t
+        (remhash root r2/sly-project-connections)
+        (message "No live SLY connection for project: %s" root)))))
 
   ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
   (r2->defhook r2/sly-auto-connect
@@ -442,7 +459,9 @@ with, and bind any buffers left waiting under that root."
             (when (eq major-mode 'lisp-mode)
               (font-lock-flush)
               (font-lock-ensure)))))))
-    :hook sly-connected-hook))
+    :hook sly-connected-hook)
+
+  ) ;; end `use-package' sly
 
 (use-package sly-asdf
   :ensure t
