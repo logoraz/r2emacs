@@ -320,6 +320,25 @@
                 (allow-no-window . t))
               display-buffer-alist))
 
+  (defvar r2/sly-project-connections (make-hash-table :test 'equal)
+    "Maps project root directory (string) to its SLY connection process.")
+
+  (defvar r2/sly--pending-project-root nil
+    "Project root awaiting a SLY connection, set just before calling
+`sly' and consumed once `sly-connected-hook' fires.")
+
+  (defun r2/sly-project-root ()
+    "Return the current buffer's project root, or `default-directory'."
+    (expand-file-name
+     (if-let* ((proj (project-current)))
+         (project-root proj)
+       default-directory)))
+
+  (defun r2/sly-find-project-connection (root)
+    "Return a live SLY connection for project ROOT, or nil."
+    (let ((conn (gethash root r2/sly-project-connections)))
+      (when (and conn (sly-connected-p conn)) conn)))
+
   ;; Register sly mrepl buffer with the frame it is openned with instead of it
   ;; being considered unassociated from setting it to the background..
   (r2->defhook r2/register-mrepl-frame
@@ -337,11 +356,27 @@
 
   ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
   (r2->defhook r2/sly-auto-connect
-    "Auto-connect to SLY if not already connected."
+    "Connect the current buffer to a SLY REPL dedicated to its
+project, starting a new inferior Lisp if none exists yet for
+this project root."
     ((interactive)
-     (unless (sly-connected-p)
-       (save-excursion (sly))))
+     (let* ((root (r2/sly-project-root))
+            (conn (r2/sly-find-project-connection root)))
+       (if conn
+           (setq-local sly-buffer-connection conn)
+         (setq r2/sly--pending-project-root root)
+         (save-excursion (sly)))))
     :hook lisp-mode-hook)
+
+  (r2->defhook r2/sly-register-project-connection
+    "Associate the newly-established SLY connection with whichever
+project root was pending when it was initiated."
+    ((when r2/sly--pending-project-root
+       (puthash r2/sly--pending-project-root
+                (sly-current-connection)
+                r2/sly-project-connections)
+       (setq r2/sly--pending-project-root nil)))
+    :hook sly-connected-hook)
 
   (r2->defhook r2/sly-refresh-fontification
     "Refresh fontification in Lisp buffers once SLY connects."
@@ -354,6 +389,13 @@
               (font-lock-flush)
               (font-lock-ensure)))))))
     :hook sly-connected-hook))
+
+(use-package sly-asdf
+  :disabled
+  :ensure t
+  :after sly
+  :config
+  (add-to-list 'sly-contribs 'sly-asdf 'append))
 
 
 ;;; Guile Scheme IDE
