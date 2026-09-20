@@ -327,6 +327,12 @@
     "Project root awaiting a SLY connection, set just before calling
 `sly' and consumed once `sly-connected-hook' fires.")
 
+  ;; Recognize any directory containing a .asd file as a project root,
+  ;; even with no VC marker. Needed for r2/sly-project-root to
+  ;; correctly group buffers under one connection for a project that
+  ;; hasn't been git-initialized yet.
+  (setq project-vc-extra-root-markers '("*.asd"))
+
   (defun r2/sly-project-root ()
     "Return the current buffer's project root, or `default-directory'."
     (expand-file-name
@@ -336,8 +342,9 @@
 
   (defun r2/sly-find-project-connection (root)
     "Return a live SLY connection for project ROOT, or nil."
-    (let ((conn (gethash root r2/sly-project-connections)))
-      (when (and conn (sly-connected-p conn)) conn)))
+    (when-let* ((conn (gethash root r2/sly-project-connections))
+                ((process-live-p conn)))
+      conn))
 
   ;; Register sly mrepl buffer with the frame it is openned with instead of it
   ;; being considered unassociated from setting it to the background..
@@ -354,6 +361,23 @@
      (setq-local corfu-auto nil))
     :hook sly-mode-hook)
 
+  (defun r2/sly-lisp-command (root)
+    "Return a `sly-start' plist for project ROOT, or nil to use the
+default `sly-lisp-implementations' entry.
+If ROOT contains a manifest.scm and `guix' is available, wrap
+SBCL in `guix shell -m manifest.scm --' so Guix-provided systems
+are visible, exporting LD_LIBRARY_PATH from $GUIX_ENVIRONMENT
+before exec'ing sbcl."
+    (let ((manifest (expand-file-name "manifest.scm" root)))
+      (when (and (file-exists-p manifest)
+                 (executable-find "guix"))
+        (list :program "guix"
+              :program-args
+              (list "shell" "-m" manifest "--" "sh" "-c"
+                    (concat "export LD_LIBRARY_PATH="
+                            "\"$GUIX_ENVIRONMENT/lib:$LD_LIBRARY_PATH\"; "
+                            "exec sbcl"))))))
+
   ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
   (r2->defhook r2/sly-auto-connect
     "Connect the current buffer to a SLY REPL dedicated to its
@@ -365,7 +389,11 @@ this project root."
        (if conn
            (setq-local sly-buffer-connection conn)
          (setq r2/sly--pending-project-root root)
-         (save-excursion (sly)))))
+         (save-excursion
+           (let ((plist (r2/sly-lisp-command root)))
+             (if plist
+                 (apply #'sly-start plist)
+               (sly)))))))
     :hook lisp-mode-hook)
 
   (r2->defhook r2/sly-register-project-connection
@@ -391,7 +419,6 @@ project root was pending when it was initiated."
     :hook sly-connected-hook))
 
 (use-package sly-asdf
-  :disabled
   :ensure t
   :after sly
   :config
