@@ -323,10 +323,6 @@
   (defvar r2/sly-project-connections (make-hash-table :test 'equal)
     "Maps project root directory (string) to its SLY connection process.")
 
-  (defvar r2/sly--pending-project-root nil
-    "Project root awaiting a SLY connection, set just before calling
-`sly' and consumed once `sly-connected-hook' fires.")
-
   ;; Recognize any directory containing a .asd file as a project root,
   ;; even with no VC marker. Needed for r2/sly-project-root to
   ;; correctly group buffers under one connection for a project that
@@ -334,11 +330,19 @@
   (setq project-vc-extra-root-markers '("*.asd"))
 
   (defun r2/sly-project-root ()
-    "Return the current buffer's project root, or `default-directory'."
-    (expand-file-name
-     (if-let* ((proj (project-current)))
-         (project-root proj)
-       default-directory)))
+    "Return the current buffer's project root, or `default-directory'.
+Vendored ocicl dependencies live under a project's own `ocicl/'
+subdirectory and each carry their own .asd file, which would
+otherwise be misdetected as a separate project root -- resolve
+from just above any `ocicl/' segment instead."
+    (let* ((dir default-directory)
+           (ocicl-pos (string-match "/ocicl/" dir))
+           (project-current-directory-override
+            (and ocicl-pos (substring dir 0 (1+ ocicl-pos)))))
+      (expand-file-name
+       (if-let* ((proj (project-current)))
+           (project-root proj)
+         (or project-current-directory-override dir)))))
 
   (defun r2/sly-find-project-connection (root)
     "Return a live SLY connection for project ROOT, or nil."
@@ -378,32 +382,54 @@ before exec'ing sbcl."
                             "\"$GUIX_ENVIRONMENT/lib:$LD_LIBRARY_PATH\"; "
                             "exec sbcl"))))))
 
+  (defun r2/sly-project-connection-status (root)
+    "Return the live connection, the symbol `pending', or nil for
+project ROOT."
+    (let ((v (gethash root r2/sly-project-connections)))
+      (cond ((eq v 'pending) 'pending)
+            ((and v (process-live-p v)) v)
+            (t nil))))
+
+
   ;; See: https://joaotavora.github.io/sly/#Loading-Slynk-faster
   (r2->defhook r2/sly-auto-connect
     "Connect the current buffer to a SLY REPL dedicated to its
-project, starting a new inferior Lisp if none exists yet for
-this project root."
+project. If a connection is already live for this root, bind
+to it. If one is already being established (marked `pending'),
+do nothing further -- `r2/sly-register-project-connection' will
+bind this buffer once it's ready. Otherwise mark the root
+`pending' and start a new inferior Lisp."
     ((interactive)
      (let* ((root (r2/sly-project-root))
-            (conn (r2/sly-find-project-connection root)))
-       (if conn
-           (setq-local sly-buffer-connection conn)
-         (setq r2/sly--pending-project-root root)
+            (status (r2/sly-project-connection-status root)))
+       (cond
+        ((processp status)
+         (setq-local sly-buffer-connection status))
+        ((eq status 'pending) nil)
+        (t
+         (puthash root 'pending r2/sly-project-connections)
          (save-excursion
-           (let ((plist (r2/sly-lisp-command root)))
-             (if plist
-                 (apply #'sly-start plist)
-               (sly)))))))
+           (let* ((plist (r2/sly-lisp-command root))
+                  (proc (if plist (apply #'sly-start plist) (sly))))
+             (when (processp proc)
+               (process-put proc 'r2/sly-project-root root))))))))
     :hook lisp-mode-hook)
 
   (r2->defhook r2/sly-register-project-connection
-    "Associate the newly-established SLY connection with whichever
-project root was pending when it was initiated."
-    ((when r2/sly--pending-project-root
-       (puthash r2/sly--pending-project-root
-                (sly-current-connection)
-                r2/sly-project-connections)
-       (setq r2/sly--pending-project-root nil)))
+    "Associate a newly-established SLY connection with whichever
+project root its underlying inferior-lisp process was tagged
+with, and bind any buffers left waiting under that root."
+    ((let* ((conn (sly-current-connection))
+            (inf (and conn (sly-inferior-process conn)))
+            (root (and inf (process-get inf 'r2/sly-project-root))))
+       (when root
+         (puthash root conn r2/sly-project-connections)
+         (dolist (buf (buffer-list))
+           (with-current-buffer buf
+             (when (and (eq major-mode 'lisp-mode)
+                        (not (local-variable-p 'sly-buffer-connection))
+                        (equal (r2/sly-project-root) root))
+               (setq-local sly-buffer-connection conn)))))))
     :hook sly-connected-hook)
 
   (r2->defhook r2/sly-refresh-fontification
@@ -458,8 +484,8 @@ project root was pending when it was initiated."
 (use-package arei
   :if (eq system-type 'gnu/linux)
   :vc (:url "https://git.sr.ht/~abcdw/emacs-arei"
-       :lisp-dir "lisp"
-       :rev :newest)
+            :lisp-dir "lisp"
+            :rev :newest)
   :commands (r2/kill-ares-nrepl
              r2/ares-nrepl-start)
   :init
