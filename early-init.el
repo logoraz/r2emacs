@@ -12,6 +12,10 @@
 ;;;
 ;;; Bootstrap
 ;;;
+(defvar r2emacs-name
+  (if (string-match-p "neomacs" invocation-name) "neomacs" "emacs")
+  "Cache directory name, so GNU Emacs and NEO Emacs keep separate state.")
+
 (defvar r2-xdg-config-home
   (let ((config-dir
          (pcase system-type
@@ -25,9 +29,9 @@
 (defvar r2-xdg-cache-home
   (let ((cache-dir
          (pcase system-type
-           ('windows-nt (expand-file-name "emacs" "~/AppData/Local/cache"))
-           ('gnu/linux  (expand-file-name "emacs" "~/.cache"))
-           (_           (expand-file-name "emacs" "~/.cache")))))
+           ('windows-nt (expand-file-name r2emacs-name "~/AppData/Local/cache"))
+           ('gnu/linux  (expand-file-name r2emacs-name "~/.cache"))
+           (_           (expand-file-name r2emacs-name "~/.cache")))))
     (make-directory cache-dir t)
     cache-dir)
   "Emacs cache path - creates directory if non-existent.")

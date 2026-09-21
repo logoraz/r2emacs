@@ -370,7 +370,8 @@ Runs `r2/clear-file-history', `r2/clear-project-history', and
      (with-selected-frame frame
        (load-theme 'doom-tomorrow-night :no-confirm)))
     :args frame
-    :hook after-make-frame-functions)
+    :hook after-make-frame-functions
+    :depth -80)
 
   ;; Enable custom neotree theme (nerd-icons must be installed!)
   (doom-themes-neotree-config)
