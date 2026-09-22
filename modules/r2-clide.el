@@ -351,10 +351,19 @@ from just above any `ocicl/' segment instead."
       conn))
 
   ;; Register sly mrepl buffer with the frame it is openned with instead of it
-  ;; being considered unassociated from setting it to the background..
+  ;; being considered unassociated from setting it to the background...
   (r2->defhook r2/register-mrepl-frame
-    "Associates sly-mrepl buffer  with the curent frame."
-    ((beframe-assume-buffers-matching-regexp-all-frames "\\*sly-mrepl"))
+    "Associate the current sly-mrepl buffer with the frame that
+originally triggered its connection, since this hook runs
+asynchronously and the selected frame by then may not be it."
+    ((let* ((conn (sly-connection))
+            (inf (and conn (sly-inferior-process conn)))
+            (frame (and inf (process-get inf 'r2/sly-frame)))
+            (buf (current-buffer)))
+       (if (frame-live-p frame)
+           (with-selected-frame frame
+             (beframe--modify-buffer-list :assume (list buf)))
+         (beframe--modify-buffer-list :assume (list buf)))))
     :hook sly-mrepl-mode-hook)
 
   ;; Sly completions
@@ -429,7 +438,8 @@ bind this buffer once it's ready. Otherwise mark the root
            (let* ((plist (r2/sly-lisp-command root))
                   (proc (if plist (apply #'sly-start plist) (sly))))
              (when (processp proc)
-               (process-put proc 'r2/sly-project-root root))))))))
+               (process-put proc 'r2/sly-project-root root)
+               (process-put proc 'r2/sly-frame (selected-frame)))))))))
     :hook lisp-mode-hook)
 
   (r2->defhook r2/sly-register-project-connection
