@@ -595,25 +595,34 @@ Overwrites any existing layout with the same name in this frame."
       (let ((frame (make-frame-command)))
         (set-frame-parameter frame 'name nil))))
 
+  (defvar r2/--frame-color-counter 0
+    "Monotonic counter for assigning stable per-frame colors.")
+
+  (defun r2/frame-color (frame)
+    "Return FRAME's stable beframe color, assigning and caching one
+on first use so it never drifts with frame-list ordering."
+    (or (frame-parameter frame 'r2/beframe-color)
+        (let ((color (nth (mod r2/--frame-color-counter
+                               (length r2--beframe-colors))
+                          r2--beframe-colors)))
+          (setq r2/--frame-color-counter (1+ r2/--frame-color-counter))
+          (set-frame-parameter frame 'r2/beframe-color color)
+          color)))
+
   (defun r2/beframe-buffer-color (buffer)
     "Return color for BUFFER based on its beframe association.
-Returns specified color  for global buffers, frame-specific color otherwise."
+Returns specified color for global buffers, frame-specific color otherwise."
     (when (bound-and-true-p beframe-mode)
-      ;; Check if buffer is a global buffer
       (if (member (buffer-name buffer) beframe-global-buffers)
           r2--global-buffer-color
-        ;; Otherwise find frame-specific color
-        (let* ((frames (frame-list))
-               (frame-index
-                (cl-position-if
-                 (lambda (frame)
-                   (with-selected-frame frame
-                     (memq buffer (beframe-buffer-list frame))))
-                 frames)))
-          (if frame-index
-              (nth (mod frame-index (length r2--beframe-colors))
-                   r2--beframe-colors)
-            ;; Not associated with any frame
+        (let ((owner-frame
+               (cl-find-if
+                (lambda (frame)
+                  (with-selected-frame frame
+                    (memq buffer (beframe-buffer-list frame))))
+                (frame-list))))
+          (if owner-frame
+              (r2/frame-color owner-frame)
             r2--unassociated-buffer-color)))))
 
   (defun r2/buffer-menu-colorize ()
