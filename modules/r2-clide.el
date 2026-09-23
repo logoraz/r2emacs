@@ -350,6 +350,32 @@ from just above any `ocicl/' segment instead."
                 ((process-live-p conn)))
       conn))
 
+  ;; Dynamically bound around the synchronous call to `sly-start'/`sly'
+  ;; in `r2/sly-auto-connect', consumed by `r2/sly-tag-inferior-process'
+  ;; while it runs -- safe with no locking since Elisp is single-threaded
+  ;; and `sly-inferior-process-start-hook' fires synchronously from
+  ;; inside that same call, before any other invocation can interleave.
+  (defvar r2/sly--connecting-root nil
+    "Dynamically bound to the project root while a new SLY inferior
+process is being started, consumed by `r2/sly-tag-inferior-process'.")
+
+  (defvar r2/sly--connecting-buffer nil
+    "Dynamically bound to the buffer that triggered a new SLY
+connection, consumed by `r2/sly-tag-inferior-process'.")
+
+  (r2->defhook r2/sly-tag-inferior-process
+    "Tag the just-started inferior Lisp process with the pending
+project root and triggering buffer. Runs synchronously from
+inside `sly-start-lisp', so `(current-buffer)' is guaranteed to
+be the new process's own buffer."
+    ((let ((proc (get-buffer-process (current-buffer))))
+       (when proc
+         (when r2/sly--connecting-root
+           (process-put proc 'r2/sly-project-root r2/sly--connecting-root))
+         (when r2/sly--connecting-buffer
+           (process-put proc 'r2/sly-triggering-buffer r2/sly--connecting-buffer)))))
+    :hook sly-inferior-process-start-hook)
+
   ;; Register sly mrepl buffer with the frame it is openned with instead of it
   ;; being considered unassociated from setting it to the background...
   (r2->defhook r2/register-mrepl-frame
@@ -434,23 +460,27 @@ bind this buffer once it's ready. Otherwise mark the root
         ((eq status 'pending) nil)
         (t
          (puthash root 'pending r2/sly-project-connections)
-         (save-excursion
-           (let* ((plist (r2/sly-lisp-command root))
-                  (proc (if plist (apply #'sly-start plist) (sly))))
-             (when (processp proc)
-               (process-put proc 'r2/sly-project-root root)
-               (process-put proc 'r2/sly-frame (selected-frame)))))))))
+         (let* ((r2/sly--connecting-root root)
+                (r2/sly--connecting-buffer (current-buffer)))
+           (save-excursion
+             (let ((plist (r2/sly-lisp-command root)))
+               (if plist (apply #'sly-start plist) (sly)))))))))
     :hook lisp-mode-hook)
 
   (r2->defhook r2/sly-register-project-connection
     "Associate a newly-established SLY connection with whichever
 project root its underlying inferior-lisp process was tagged
-with, and bind any buffers left waiting under that root."
+with, bind the buffer that directly triggered it, and catch any
+other buffers left waiting under that root."
     ((let* ((conn (sly-current-connection))
             (inf (and conn (sly-inferior-process conn)))
-            (root (and inf (process-get inf 'r2/sly-project-root))))
+            (root (and inf (process-get inf 'r2/sly-project-root)))
+            (trigger-buf (and inf (process-get inf 'r2/sly-triggering-buffer))))
        (when root
          (puthash root conn r2/sly-project-connections)
+         (when (buffer-live-p trigger-buf)
+           (with-current-buffer trigger-buf
+             (setq-local sly-buffer-connection conn)))
          (dolist (buf (buffer-list))
            (with-current-buffer buf
              (when (and (eq major-mode 'lisp-mode)
@@ -474,6 +504,7 @@ with, and bind any buffers left waiting under that root."
   ) ;; end `use-package' sly
 
 (use-package sly-asdf
+  :disabled
   :ensure t
   :after sly
   :config
