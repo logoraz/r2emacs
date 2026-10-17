@@ -363,6 +363,10 @@ process is being started, consumed by `r2/sly-tag-inferior-process'.")
     "Dynamically bound to the buffer that triggered a new SLY
 connection, consumed by `r2/sly-tag-inferior-process'.")
 
+  (defvar r2/sly--connecting-frame nil
+    "Dynamically bound to the frame that triggered a new SLY
+connection, consumed by `r2/sly-tag-inferior-process'.")
+
   (r2->defhook r2/sly-tag-inferior-process
     "Tag the just-started inferior Lisp process with the pending
 project root and triggering buffer. Runs synchronously from
@@ -373,7 +377,9 @@ be the new process's own buffer."
          (when r2/sly--connecting-root
            (process-put proc 'r2/sly-project-root r2/sly--connecting-root))
          (when r2/sly--connecting-buffer
-           (process-put proc 'r2/sly-triggering-buffer r2/sly--connecting-buffer)))))
+           (process-put proc 'r2/sly-triggering-buffer r2/sly--connecting-buffer))
+         (when r2/sly--connecting-frame
+           (process-put proc 'r2/sly-frame r2/sly--connecting-frame)))))
     :hook sly-inferior-process-start-hook)
 
   ;; Register sly mrepl buffer with the frame it is openned with instead of it
@@ -386,10 +392,8 @@ asynchronously and the selected frame by then may not be it."
             (inf (and conn (sly-inferior-process conn)))
             (frame (and inf (process-get inf 'r2/sly-frame)))
             (buf (current-buffer)))
-       (if (frame-live-p frame)
-           (with-selected-frame frame
-             (beframe--modify-buffer-list :assume (list buf)))
-         (beframe--modify-buffer-list :assume (list buf)))))
+       (beframe--modify-buffer-list (and (frame-live-p frame) frame)
+                                    :assume (list buf))))
     :hook sly-mrepl-mode-hook)
 
   ;; Sly completions
@@ -461,7 +465,8 @@ bind this buffer once it's ready. Otherwise mark the root
         (t
          (puthash root 'pending r2/sly-project-connections)
          (let* ((r2/sly--connecting-root root)
-                (r2/sly--connecting-buffer (current-buffer)))
+                (r2/sly--connecting-buffer (current-buffer))
+                (r2/sly--connecting-frame (selected-frame)))
            (save-excursion
              (let ((plist (r2/sly-lisp-command root)))
                (if plist (apply #'sly-start plist) (sly)))))))))
